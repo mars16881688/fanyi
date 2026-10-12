@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastCapture: Capture?
     private var selectionGeneration = 0
     private var requestGeneration = 0
+    private var replyGeneration = 0
+    private var replyTask: Task<Void, Never>?
+    private var replyContext: AppContext?
     private var requestTask: Task<Void, Never>?
     private var keyMonitors: [Any] = []
     private var trustPollTask: Task<Void, Never>?
@@ -47,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsWindow = SettingsWindowController()
 
         anchor.onPick = { [weak self] kind in self?.anchorPicked(kind) }
+        result.onReplyTranslate = { [weak self] text in self?.translateReply(text) }
         result.onClose = { [weak self] in self?.closeResult() }
         result.onReplace = { [weak self] text in self?.replaceSelection(with: text) }
         monitor.onMouseDown = { [weak self] point in self?.mouseDown(at: point) }
@@ -276,6 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !paused, AppSettings.showAnchor, AXIsProcessTrusted() else { return }
         guard let app = frontmostForeignApp() else { return }
         if AppSettings.isExcluded(bundleID: app.bundleIdentifier) { return }
+        // Selecting text inside our own result card (e.g. the reply box) is not
+        // a selection in the foreign app.
+        if result.isVisible && result.frame.contains(gesture.up) { return }
 
         // Clipboard fallback only for real drags (not double-clicks), and never
         // in apps where ⌘C would copy something other than text.
@@ -333,6 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Running a request
 
     private func run(_ kind: ActionKind, capture: Capture, at point: NSPoint) {
+        cancelReply()
         requestTask?.cancel()
         requestGeneration += 1
         let generation = requestGeneration
@@ -345,10 +353,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let messages: [ChatMessage]
         let temperature: Double
         var shortPhrase = false
+        var replyOriginal: String?
 
         switch kind {
         case .translate:
             let direction = LanguageDetector.direction(for: text, preference: AppSettings.targetLanguage)
+            if direction.target == .simplifiedChinese {
+                replyOriginal = text
+                replyContext = context
+            }
             shortPhrase = Prompts.isShortPhrase(text)
             header = "\(direction.sourceLabel) → \(direction.target.shortLabel)  ·  \(context.appName)"
             messages = Prompts.translate(text: text, direction: direction, context: context, shortPhrase: shortPhrase)
@@ -360,7 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         result.present(kind: kind, header: header, editable: capture.selection.editable,
-                       shortPhrase: shortPhrase, at: point)
+                       shortPhrase: shortPhrase, at: point, originalText: replyOriginal)
 
         guard let key = Keychain.apiKey(), !key.isEmpty else {
             result.showError(LLMError.missingKey.errorDescription ?? "Missing API key")
@@ -385,7 +398,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    private func cancelReply() {
+        replyTask?.cancel()
+        replyTask = nil
+        replyGeneration += 1
+        replyContext = nil
+    }
+
+    private func translateReply(_ text: String) {
+        guard let context = replyContext, result.isVisible, !text.trimmed.isEmpty else { return }
+        replyTask?.cancel()
+        replyGeneration += 1
+        let generation = replyGeneration
+        guard let key = Keychain.apiKey(), !key.trimmed.isEmpty else {
+            result.showReplyError(LLMError.missingKey.errorDescription ?? "Missing API key")
+            return
+        }
+        let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
+        let messages = Prompts.translate(
+            text: text, direction: TranslationDirection(sourceLabel: "中文", target: .english),
+            context: context, shortPhrase: false)
+        replyTask = Task { @MainActor in
+            do {
+                try await LLMClient.streamChat(config: config, messages: messages, temperature: 0.3) { [weak self] delta in
+                    guard let self, self.replyGeneration == generation else { return }
+                    self.result.appendReply(delta)
+                }
+                guard self.replyGeneration == generation, !Task.isCancelled else { return }
+                self.result.finishReply()
+            } catch {
+                guard self.replyGeneration == generation, !Task.isCancelled else { return }
+                if error is CancellationError { return }
+                if let urlError = error as? URLError, urlError.code == .cancelled { return }
+                self.result.showReplyError(error.localizedDescription)
+            }
+        }
+    }
+
     private func closeResult() {
+        cancelReply()
         requestTask?.cancel()
         requestTask = nil
         requestGeneration += 1
