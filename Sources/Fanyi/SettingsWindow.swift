@@ -88,27 +88,57 @@ final class SettingsModel: ObservableObject {
     }
 }
 
+@MainActor
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(nsImage: FanyiStyle.symbol("character.bubble", description: "Fanyi", size: 24) ?? NSImage())
+                    .foregroundColor(Color(nsColor: .controlAccentColor))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Fanyi 设置").font(.title3.weight(.semibold))
+                    Text("划词翻译 · 改写 · 回复").font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 8)
+
             Form {
                 Section("模型服务（OpenAI 兼容）") {
                     SecureField("API Key", text: $model.apiKey, prompt: Text("sk-…"))
                     TextField("Base URL", text: $model.baseURL, prompt: Text(AppSettings.defaultBaseURL))
                     TextField("模型", text: $model.model, prompt: Text(AppSettings.defaultModel))
                     HStack(spacing: 8) {
-                        Button("测试连接") { model.testConnection() }
+                        Button { model.testConnection() } label: {
+                            HStack(spacing: 5) {
+                                Image(nsImage: FanyiStyle.symbol("network", description: "测试连接") ?? NSImage())
+                                Text("测试连接")
+                            }
+                        }
                             .disabled(model.testing)
                         if model.testing {
                             ProgressView().controlSize(.small)
                         }
-                        Text(model.testResult)
+                        if !model.testResult.isEmpty {
+                            HStack(alignment: .top, spacing: 5) {
+                                if !model.testing {
+                                    Image(nsImage: FanyiStyle.symbol(
+                                        model.testResult.hasPrefix("✅") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                                        description: model.testResult) ?? NSImage())
+                                }
+                                Text(model.testResult)
+                                    .textSelection(.enabled)
+                            }
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(model.testing ? .secondary :
+                                Color(nsColor: model.testResult.hasPrefix("✅") ? .systemGreen : .systemRed))
                             .lineLimit(3)
-                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 Section("翻译") {
@@ -131,20 +161,28 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
 
-            HStack(alignment: .center) {
+            Divider()
+            HStack(alignment: .center, spacing: 10) {
+                if !model.status.isEmpty {
+                    Image(nsImage: FanyiStyle.symbol(
+                        model.status == "已保存 ✓" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                        description: model.status) ?? NSImage())
+                        .foregroundColor(Color(nsColor: model.status == "已保存 ✓" ? .systemGreen : .systemOrange))
+                }
                 Text(model.status)
                     .font(.callout)
                     .foregroundColor(.secondary)
                     .lineLimit(3)
                 Spacer()
                 Button("保存") { model.save() }
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
-            .padding(.top, 4)
+            .padding(.top, 14)
         }
-        .frame(width: 500, height: 580)
+        .frame(width: 540, height: 640)
     }
 }
 
