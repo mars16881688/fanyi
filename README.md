@@ -17,7 +17,7 @@ cd fanyi
 ./build.sh
 ```
 
-产物：`build/Fanyi.app`（已 ad-hoc 签名，bundle id `ai.mars.fanyi`）。
+产物：`build/Fanyi.app`（App 图标由 `Resources/AppIcon.png` 在构建时生成 `AppIcon.icns`）（已 ad-hoc 签名，bundle id `ai.mars.fanyi`）。
 
 如果你在钥匙串里有一个自建的代码签名证书，可以用固定身份签名，这样重新构建后通常不用重新授权辅助功能：
 
