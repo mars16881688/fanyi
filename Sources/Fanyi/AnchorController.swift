@@ -37,7 +37,7 @@ final class AnchorController: NSObject {
         let square = NSRect(x: 0, y: 0, width: size, height: size)
         panel = FloatingPanel.make(size: square.size, allowsKey: false)
         root = HoverView(frame: square)
-        circle = RoundedSurfaceView(frame: square)
+        circle = RoundedMaterialView(frame: square)
         bubble = FirstMouseButton(frame: square)
         choices = RoundedMaterialView(frame: .zero)
         translateButton = FirstMouseButton(title: "翻译", target: nil, action: nil)
@@ -51,10 +51,7 @@ final class AnchorController: NSObject {
         root.autoresizingMask = [.width, .height]
         panel.contentView = root
 
-        if let surface = circle as? RoundedSurfaceView {
-            surface.radius = size / 2
-            surface.accent = true
-        }
+        (circle as? RoundedMaterialView)?.radius = size / 2
         root.addSubview(circle)
 
         bubble.isBordered = false
@@ -67,19 +64,13 @@ final class AnchorController: NSObject {
         } else {
             bubble.title = "译"
         }
-        bubble.contentTintColor = .selectedMenuItemTextColor
+        bubble.contentTintColor = .controlAccentColor
         bubble.toolTip = "Fanyi：翻译 / 改写"
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
         circle.addSubview(bubble)
 
-        choices.material = .popover
-        choices.blendingMode = .behindWindow
-        choices.state = .active
-        choices.wantsLayer = true
-        choices.layer?.cornerRadius = 18
         (choices as? RoundedMaterialView)?.radius = 18
-        choices.layer?.masksToBounds = true
         choices.isHidden = true
         root.addSubview(choices)
 
@@ -93,7 +84,7 @@ final class AnchorController: NSObject {
             button.image = FanyiStyle.symbol(symbol, description: button.title)
             button.imagePosition = .imageLeading
             button.imageHugsTitle = true
-            button.contentTintColor = .controlAccentColor
+            button.contentTintColor = .labelColor
             button.wantsLayer = true
             button.layer?.cornerRadius = 12
         }
@@ -142,6 +133,7 @@ final class AnchorController: NSObject {
     private func applySize(_ size: NSSize) {
         let rect = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
         panel.setFrame(ScreenGeometry.fit(rect, reference: referencePoint), display: true)
+        panel.invalidateShadow()
     }
 
     private func expand() {
