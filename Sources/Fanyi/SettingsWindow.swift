@@ -14,6 +14,13 @@ final class SettingsModel: ObservableObject {
     @Published var status = ""
     @Published var testResult = ""
     @Published var testing = false
+    @Published var historyEnabled = false
+    @Published var useMyStyle = false
+    @Published var historyCount = 0
+    @Published var styleSources = ""
+    @Published var integrationStatus = ""
+    @Published var localStatus = ""
+    @Published var confirmClear = false
 
     private var testTask: Task<Void, Never>?
 
@@ -29,6 +36,27 @@ final class SettingsModel: ObservableObject {
         launchAtLogin = SMAppService.mainApp.status == .enabled
         status = ""
         testResult = ""
+        historyEnabled = AppSettings.historyEnabled
+        useMyStyle = AppSettings.useMyStyle
+        refreshLocal()
+    }
+
+    static let historyExplanation = "默认关闭。开启后只保存在本机 ~/.fanyi/，不会上传；只有点「更新我的画像」或自动更新画像时，会把最近的记录发送到你自己配置的模型接口。"
+
+    func setHistoryEnabled(_ enabled: Bool) {
+        guard enabled, !UserDefaults.standard.bool(forKey: "historyConsentShown") else {
+            historyEnabled = enabled
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "开启记录历史？"
+        alert.informativeText = Self.historyExplanation + " 开启后每新增 30 条记录会自动更新画像。设置需点「保存」生效。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "开启")
+        alert.addButton(withTitle: "取消")
+        let response = alert.runModal()
+        historyEnabled = response == .alertFirstButtonReturn
+        if historyEnabled { UserDefaults.standard.set(true, forKey: "historyConsentShown") }
     }
 
     func save() {
@@ -42,6 +70,8 @@ final class SettingsModel: ObservableObject {
         AppSettings.model = model
         AppSettings.targetLanguage = target
         AppSettings.showAnchor = showAnchor
+        AppSettings.historyEnabled = historyEnabled
+        AppSettings.useMyStyle = useMyStyle
         AppSettings.excludedRaw = excluded.trimmed
 
         let service = SMAppService.mainApp
@@ -62,6 +92,37 @@ final class SettingsModel: ObservableObject {
         baseURL = AppSettings.baseURL
         model = AppSettings.model
         status = problems.isEmpty ? "已保存 ✓" : problems.joined(separator: "\n")
+    }
+
+    func refreshLocal() {
+        historyCount = HistoryStore.shared.count
+        let sources = StyleContext.build().sources
+        styleSources = sources.isEmpty ? "未找到任何资料" : "已找到：" + sources.joined(separator: "、")
+        let installed = AgentIntegration.status()
+        integrationStatus = "Codex：\(installed[0] ? "已接入" : "未接入")；Claude Code：\(installed[1] ? "已接入" : "未接入")"
+    }
+
+    func openFolder() {
+        do {
+            try HistoryStore.shared.ensureFolder()
+            NSWorkspace.shared.open(HistoryStore.shared.folderURL)
+        } catch { localStatus = error.localizedDescription }
+    }
+
+    func clearHistory() {
+        do {
+            try HistoryStore.shared.clear()
+            localStatus = "历史已清空（画像保留）。"
+        } catch { localStatus = "清空失败：\(error.localizedDescription)" }
+        refreshLocal()
+    }
+
+    func integrate(remove: Bool) {
+        do {
+            if remove { try AgentIntegration.remove() } else { try AgentIntegration.install() }
+            localStatus = remove ? "已移除接入。" : "已接入。"
+        } catch { localStatus = "操作失败：\(error.localizedDescription)" }
+        refreshLocal()
     }
 
     func testConnection() {
@@ -91,6 +152,7 @@ final class SettingsModel: ObservableObject {
 @MainActor
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
+    @ObservedObject private var profile = ProfileBuilder.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -100,6 +162,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Fanyi 设置").font(.title3.weight(.semibold))
                     Text("划词翻译 · 改写 · 回复").font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
             }
@@ -148,6 +211,55 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Section("历史与画像") {
+                    Toggle("记录历史", isOn: Binding(
+                        get: { model.historyEnabled },
+                        set: { model.setHistoryEnabled($0) }
+                    ))
+                    Text(SettingsModel.historyExplanation)
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("已记录 \(model.historyCount) 条").foregroundColor(.secondary)
+                    HStack {
+                        Button("打开文件夹") { model.openFolder() }
+                        Button("清空历史", role: .destructive) { model.confirmClear = true }
+                    }
+                    HStack {
+                        Button("更新我的画像") { profile.start() }
+                            .disabled(model.historyCount == 0 || profile.running)
+                        if profile.running { ProgressView().controlSize(.small) }
+                        Button("打开画像") { NSWorkspace.shared.open(profile.profileURL) }
+                            .disabled(!FileManager.default.fileExists(atPath: profile.profileURL.path))
+                    }
+                    if !profile.status.isEmpty {
+                        Text(profile.status).font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(verbatim: "仅在记录历史开启时，每新增 30 条记录自动更新画像；生成时发送最近记录到已保存的模型服务。")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Section("我的风格") {
+                    Toggle("回复时参考我的风格", isOn: $model.useMyStyle)
+                    Text(verbatim: "默认关闭。只读取当前用户自己的 ~/.fanyi/profile.md、~/.codex/AGENTS.md（设置了 $CODEX_HOME 时使用该目录）和 ~/.claude/CLAUDE.md；风格背景会随回复发送到你配置的模型接口。")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(model.styleSources).font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button("接入 Codex / Claude Code") { model.integrate(remove: false) }
+                        Button("移除接入") { model.integrate(remove: true) }
+                    }
+                    Text(model.integrationStatus).font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(verbatim: "仅在 ~/.codex/AGENTS.md 和 ~/.claude/CLAUDE.md 中添加带标记的画像引用，保留其他内容。")
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !model.localStatus.isEmpty {
+                        Text(model.localStatus).font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Section("行为") {
                     Toggle("划词后显示按钮", isOn: $model.showAnchor)
                     Toggle("开机启动", isOn: $model.launchAtLogin)
@@ -160,6 +272,13 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
+            .confirmationDialog("清空全部历史记录？此操作无法撤销。", isPresented: $model.confirmClear) {
+                Button("清空历史", role: .destructive) { model.clearHistory() }
+                Button("取消", role: .cancel) {}
+            }
+            .onReceive(profile.$running) { running in
+                if !running { model.refreshLocal() }
+            }
 
             Divider()
             HStack(alignment: .center, spacing: 10) {
@@ -182,7 +301,7 @@ struct SettingsView: View {
             .padding(.bottom, 16)
             .padding(.top, 14)
         }
-        .frame(width: 540, height: 640)
+        .frame(width: 540, height: 760)
     }
 }
 
