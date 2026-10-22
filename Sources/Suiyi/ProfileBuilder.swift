@@ -18,11 +18,11 @@ final class ProfileBuilder: ObservableObject {
     func start() {
         guard !running else { return }
         guard let key = Keychain.apiKey(), !key.trimmed.isEmpty else {
-            status = L("更新失败：请先保存 API Key。", "Update failed: save an API key first.", "更新に失敗しました：先に API キーを保存してください。")
+            status = L("更新失败：请先保存 API Key。", "Update failed: save an API key first.", "更新に失敗しました：先に API キーを保存してください。", "업데이트 실패: 먼저 API 키를 저장하세요.")
             return
         }
         let entries = HistoryStore.shared.recentEntries(limit: 200)
-        guard !entries.isEmpty else { status = L("暂无历史记录。", "No history yet.", "履歴がまだありません。"); return }
+        guard !entries.isEmpty else { status = L("暂无历史记录。", "No history yet.", "履歴がまだありません。", "아직 기록이 없습니다."); return }
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
         var input = ""
         var used = 0
@@ -57,7 +57,7 @@ final class ProfileBuilder: ObservableObject {
         最后一个部分给出 3–6 个简短且已匿名的表达示例。保持克制、简洁。
         """
         running = true
-        status = L("正在更新画像…", "Updating profile…", "プロファイルを更新中…")
+        status = L("正在更新画像…", "Updating profile…", "プロファイルを更新中…", "프로필 업데이트 중…")
         let output = Output()
         let historyInput = input
         task = Task { @MainActor [weak self] in
@@ -81,9 +81,9 @@ final class ProfileBuilder: ObservableObject {
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: self.profileURL.path)
                 let current = UserDefaults.standard.integer(forKey: "profileEntriesSinceUpdate")
                 UserDefaults.standard.set(max(0, current - counterAtStart), forKey: "profileEntriesSinceUpdate")
-                self.status = L("画像已更新 ✓（\(used) 条记录）", "Profile updated ✓ (\(used) entries)", "プロファイルを更新しました ✓（\(used) 件）")
+                self.status = L("画像已更新 ✓（\(used) 条记录）", "Profile updated ✓ (\(used) entries)", "プロファイルを更新しました ✓（\(used) 件）", "프로필 업데이트됨 ✓ (\(used)개 기록)")
             } catch {
-                self.status = L("更新失败：", "Update failed: ", "更新に失敗しました：") + LLMError.userMessage(for: error)
+                self.status = L("更新失败：", "Update failed: ", "更新に失敗しました：", "업데이트 실패: ") + LLMError.userMessage(for: error)
             }
         }
     }

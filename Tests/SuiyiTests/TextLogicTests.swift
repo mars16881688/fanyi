@@ -7,12 +7,14 @@ struct LanguageDetectorTests {
     private static let english = "Could we move the meeting to Thursday?"
     private static let chinese = "我们周四开会可以吗？"
     private static let japanese = "明日の会議は何時からですか？"
+    private static let korean = "내일 회의는 몇 시에 시작하나요?"
 
     @Test("Detects the three working languages")
     func detects() {
         #expect(LanguageDetector.detect(Self.english) == .english)
         #expect(LanguageDetector.detect(Self.chinese) == .chinese)
         #expect(LanguageDetector.detect(Self.japanese) == .japanese)
+        #expect(LanguageDetector.detect(Self.korean) == .korean)
         #expect(LanguageDetector.detect("   ") == nil)
     }
 
@@ -28,6 +30,12 @@ struct LanguageDetectorTests {
         (english, .japanese, .english, .japanese),
         (chinese, .japanese, .english, .japanese),
         (japanese, .japanese, .chinese, .chinese),
+        (korean, Language.chinese, Language.english, Language.chinese),
+        (korean, .english, .chinese, .english),
+        (korean, .korean, .english, .english),
+        (chinese, .korean, .english, .korean),
+        (english, .korean, .japanese, .korean),
+        (japanese, .korean, .english, .korean),
     ])
     func pairs(text: String, mine: Language, outgoing: Language, expected: Language) {
         #expect(LanguageDetector.direction(for: text, mine: mine, outgoing: outgoing).target == expected)
@@ -35,6 +43,9 @@ struct LanguageDetectorTests {
 
     @Test("Replies go back in the sender's language")
     func replies() throws {
+        let fromKorean = LanguageDetector.direction(for: Self.korean, mine: .japanese, outgoing: .english)
+        #expect(try #require(LanguageDetector.replyDirection(for: fromKorean, mine: .japanese)).target == .korean)
+
         let fromJapanese = LanguageDetector.direction(for: Self.japanese, mine: .chinese, outgoing: .english)
         let reply = try #require(LanguageDetector.replyDirection(for: fromJapanese, mine: .chinese))
         #expect(reply.source == .chinese && reply.target == .japanese)
@@ -56,7 +67,10 @@ struct LanguageDetectorTests {
         #expect(Language(.french)?.code == "fr")
         #expect(Language(code: "fr").promptName == "French")
         #expect(Language.japanese.promptName.contains("Japanese"))
-        #expect(Language.selectable == [.chinese, .english, .japanese])
+        #expect(Language.selectable == [.chinese, .english, .japanese, .korean])
+        #expect(Language(.korean) == .korean)
+        #expect(Language.korean.promptName.contains("Korean"))
+        #expect(Language.korean.nativeName == "한국어")
     }
 
     @Test("Script counting")
@@ -92,6 +106,7 @@ struct LanguageSettingsTests {
         (["ja-JP", "en-US"], Language.japanese, Language.english),
         (["zh-Hans-CN"], .chinese, .english),
         (["en-GB"], .english, .chinese),
+        (["ko-KR"], .korean, .english),
         (["de-DE"], .english, .chinese),
     ])
     func system(preferred: [String], mine: Language, outgoing: Language) {
@@ -108,7 +123,7 @@ struct LanguageSettingsTests {
     }
 
     @Test("Interface language resolution", arguments: [
-        (["zh-Hant-TW"], UILanguage.zh), (["ja"], .ja), (["en-US"], .en), (["ko-KR", "ja-JP"], .ja), ([String](), .en),
+        (["zh-Hant-TW"], UILanguage.zh), (["ja"], .ja), (["en-US"], .en), (["ko-KR", "ja-JP"], .ko), (["fr-FR", "ja-JP"], .ja), ([String](), .en),
     ])
     func uiLanguage(preferred: [String], expected: UILanguage) {
         #expect(UILanguage.resolve(preferred) == expected)
