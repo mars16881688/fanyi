@@ -61,20 +61,63 @@ struct AppContext {
     let bundleID: String
     let windowTitle: String?
     let scene: SceneKind
+    /// Text around the selection (up to `ContextCollector.surroundingRadius` characters each side),
+    /// sent as background so the model can pick the right meaning. Dropped when it looks sensitive.
+    var surrounding: String? = nil
 }
 
 @MainActor
 enum ContextCollector {
+    static let surroundingRadius = 400
+    private static let maxValueLength = 2_000_000
+
     /// `windowTitle` is read before the selection (see `windowTitle(pid:)`) so a sensitive window
-    /// is rejected without reading anything else. Never reads the text around the selection.
-    /// A title that itself looks like a secret (e.g. a mail subject carrying a one-time code) is dropped.
+    /// is rejected without reading anything else. Runs only after the guards approved the selection.
+    /// A title that itself looks like a secret (e.g. a mail subject carrying a one-time code) is dropped,
+    /// and so is nearby text that looks sensitive.
     static func collect(for selection: CapturedSelection, windowTitle: String?) -> AppContext {
-        AppContext(
+        var surrounding: String?
+        if let element = selection.element {
+            surrounding = surroundingText(in: element, selected: selection.text, preferRange: selection.viaAX)
+        }
+        return AppContext(
             appName: selection.appName,
             bundleID: selection.bundleID ?? "",
             windowTitle: SensitiveGuard.sanitizedTitle(windowTitle),
-            scene: SceneKind.forBundleID(selection.bundleID)
+            scene: SceneKind.forBundleID(selection.bundleID),
+            surrounding: sanitizedSurrounding(surrounding)
         )
+    }
+
+    /// Nearby text is background only, so anything that looks like a secret drops all of it.
+    nonisolated static func sanitizedSurrounding(_ text: String?) -> String? {
+        guard let text = text?.trimmed, !text.isEmpty, !SensitiveGuard.looksSensitive(text) else { return nil }
+        return text
+    }
+
+    private static func surroundingText(in element: AXUIElement, selected: String, preferRange: Bool) -> String? {
+        guard let value = AX.string(element, kAXValueAttribute) else { return nil }
+        let ns = value as NSString
+        guard ns.length > 0, ns.length <= maxValueLength else { return nil }
+
+        var selection = NSRange(location: NSNotFound, length: 0)
+        if preferRange, let range = AX.range(element, kAXSelectedTextRangeAttribute),
+           range.location >= 0, range.length > 0, range.location + range.length <= ns.length {
+            selection = NSRange(location: range.location, length: range.length)
+        }
+        if selection.location == NSNotFound {
+            let found = ns.range(of: selected)
+            guard found.location != NSNotFound else { return nil }
+            selection = found
+        }
+
+        let start = max(0, selection.location - surroundingRadius)
+        let end = min(ns.length, NSMaxRange(selection) + surroundingRadius)
+        guard end > start else { return nil }
+        let window = ns.rangeOfComposedCharacterSequences(for: NSRange(location: start, length: end - start))
+        let snippet = ns.substring(with: window).trimmed
+        if snippet.isEmpty || snippet == selected.trimmed { return nil }
+        return snippet
     }
 
     /// URL of the page around `element`: AXURL of the nearest AXWebArea ancestor (never of a link,

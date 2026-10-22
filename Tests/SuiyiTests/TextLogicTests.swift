@@ -159,6 +159,22 @@ struct PromptTests {
         }
     }
 
+    @Test("Nearby text is sent as background, unless it looks sensitive")
+    func nearbyText() {
+        let direction = TranslationDirection(source: .english, target: .chinese)
+        let withNearby = AppContext(appName: "Slack", bundleID: "com.tinyspeck.slackmacgap", windowTitle: "#release",
+                                    scene: .chat, surrounding: "QA signed off on build 2.4. Let's ship it Friday.")
+        let system = Prompts.translate(text: "ship it", direction: direction, context: withNearby,
+                                       style: .colloquial, shortPhrase: true)[0].content
+        #expect(system.contains("Nearby text"))
+        #expect(system.contains("QA signed off on build 2.4."))
+
+        #expect(ContextCollector.sanitizedSurrounding("  Meeting moved to Thursday.  ") == "Meeting moved to Thursday.")
+        #expect(ContextCollector.sanitizedSurrounding("Here you go\npassword: hunter2\nthanks") == nil)
+        #expect(ContextCollector.sanitizedSurrounding("   ") == nil)
+        #expect(ContextCollector.sanitizedSurrounding(nil) == nil)
+    }
+
     @Test("Window title line is omitted when there is none")
     func noWindowTitle() {
         let bare = AppContext(appName: "Notes", bundleID: "com.apple.notes", windowTitle: nil, scene: .document)

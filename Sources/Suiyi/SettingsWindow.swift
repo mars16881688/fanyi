@@ -248,9 +248,9 @@ struct SettingsView: View {
                             Text(style.label).tag(style)
                         }
                     }
-                    Text(L("翻译和回复译文都按此倾向措辞；改写不受影响。发给模型的只有选中的文字、应用名称、窗口标题和应用类型（聊天、邮件、代码等）；回复时加上你写的回复，开启「我的风格」时另附画像。",
-                           "Translations and translated replies lean this way; Rewrite is unaffected. Only the selected text, the app name, the window title and the app type (chat, e-mail, code…) are sent to the model, plus your reply when replying and your profile if My style is on.",
-                           "翻訳と返信の訳文はこの傾向で表現します。書き換えには影響しません。モデルに送るのは選択したテキスト、アプリ名、ウィンドウタイトル、アプリの種類（チャット、メール、コードなど）だけです。返信時は自分の返信、「自分のスタイル」がオンの場合はプロファイルも送ります。"))
+                    Text(L("翻译和回复译文都按此倾向措辞；改写不受影响。发给模型的是选中的文字、应用名称、窗口标题、应用类型（聊天、邮件、代码等）和选区附近的文字（像密码或密钥时不发送）；回复时加上你写的回复，开启「我的风格」时另附风格资料。",
+                           "Translations and translated replies lean this way; Rewrite is unaffected. The model receives the selected text, the app name, the window title, the app type (chat, e-mail, code…) and the text around the selection (skipped if it looks like a password or key), plus your reply when replying and your style notes if My style is on.",
+                           "翻訳と返信の訳文はこの傾向で表現します。書き換えには影響しません。モデルに送るのは選択したテキスト、アプリ名、ウィンドウタイトル、アプリの種類（チャット、メール、コードなど）と選択部分の前後の文章（パスワードやキーのように見える場合は送りません）です。返信時は自分の返信、「自分のスタイル」がオンの場合はスタイル情報も送ります。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -307,14 +307,13 @@ struct SettingsView: View {
                 }
                 Section(L("我的风格", "My style", "自分のスタイル")) {
                     Toggle(L("回复时参考我的风格", "Use my style in replies", "返信で自分のスタイルを参考にする"), isOn: $model.useMyStyle)
-                    Text(verbatim: L("默认关闭。只读取 ~/.suiyi/profile.md（看起来像密码或密钥的行会被去掉），随回复发送到你配置的模型接口。不会读取或发送 ~/.claude/CLAUDE.md、~/.codex/AGENTS.md。", "Off by default. Reads only ~/.suiyi/profile.md (lines that look like passwords or keys are dropped) and sends it with replies to your model API. ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md are never read or sent.", "既定ではオフ。~/.suiyi/profile.md だけを読み取り（パスワードやキーのような行は除外）、返信と一緒に設定したモデル API に送信します。~/.claude/CLAUDE.md と ~/.codex/AGENTS.md は読み取りも送信もしません。"))
+                    Text(verbatim: L("默认关闭。只读取当前用户自己的 ~/.suiyi/profile.md、~/.codex/AGENTS.md（设置了 $CODEX_HOME 时使用该目录）和 ~/.claude/CLAUDE.md，看起来像密码或密钥的行会被去掉；风格背景会随回复发送到你配置的模型接口。", "Off by default. Reads only your own ~/.suiyi/profile.md, ~/.codex/AGENTS.md (or $CODEX_HOME) and ~/.claude/CLAUDE.md, dropping lines that look like passwords or keys; the style notes are sent with replies to your model API.", "既定ではオフ。自分の ~/.suiyi/profile.md、~/.codex/AGENTS.md（$CODEX_HOME 設定時はそのフォルダ）、~/.claude/CLAUDE.md のみを読み取り、パスワードやキーのような行は除外します。スタイル情報は返信と一緒に設定したモデル API に送信されます。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(model.styleSources).font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    // 0.2.1.k.01: connecting is disabled (the profile is model-written from other people's
-                    // text and would become instructions for Claude Code / Codex); removing still works.
                     HStack {
+                        Button(L("接入 Codex / Claude Code", "Connect Codex / Claude Code", "Codex / Claude Code に接続")) { model.integrate(remove: false) }
                         Button(L("移除接入", "Disconnect", "接続を解除")) { model.integrate(remove: true) }
                     }
                     Text(model.integrationStatus).font(.caption).foregroundColor(.secondary)
