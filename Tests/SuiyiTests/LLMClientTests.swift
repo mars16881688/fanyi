@@ -120,3 +120,39 @@ struct UpdateCheckerTests {
         #expect(UpdateChecker.feedURL.host == "mars16881688.github.io")
     }
 }
+
+@Suite("Feedback links")
+struct FeedbackTests {
+    private let env = FeedbackEnvironment(appVersion: "0.2.1", build: "3", macOS: "15.1.0",
+                                          interface: "zh", languages: "zh → en")
+
+    @Test("GitHub link targets the public site repo with a prefilled issue")
+    func issueLink() throws {
+        let url = try #require(FeedbackLink.issueURL(kind: .bug, text: "切换 tab 后卡片跳动\n第二行细节", environment: env))
+        let parts = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        #expect(parts.host == "github.com" && parts.path == "/mars16881688/fanyi-site/issues/new")
+        let items = Dictionary(uniqueKeysWithValues: (parts.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        #expect(items["title"] == "[Bug] 切换 tab 后卡片跳动")
+        #expect(items["labels"] == "feedback")
+        let body = try #require(items["body"])
+        #expect(body.contains("第二行细节") && body.contains("Suiyi 0.2.1 (3)") && body.contains("macOS 15.1.0"))
+    }
+
+    @Test("Long text is truncated and titles are capped")
+    func limits() throws {
+        let long = String(repeating: "很长的描述", count: 2000)
+        let url = try #require(FeedbackLink.issueURL(kind: .idea, text: long, environment: env))
+        #expect(url.absoluteString.count < 40_000)
+        #expect(FeedbackLink.title(kind: .idea, text: long).count <= 68)
+        #expect(FeedbackLink.title(kind: .idea, text: "加个快捷键").hasPrefix("[Idea] "))
+    }
+
+    @Test("Email fallback carries the same report")
+    func mail() throws {
+        let url = try #require(FeedbackLink.mailURL(kind: .bug, text: "崩溃了", environment: env))
+        #expect(url.scheme == "mailto")
+        #expect(url.absoluteString.hasPrefix("mailto:mars.yahui@gmail.com?"))
+        let parts = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        #expect(parts.queryItems?.first { $0.name == "body" }?.value?.contains("崩溃了") == true)
+    }
+}
