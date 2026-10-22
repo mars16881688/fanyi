@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var replyGeneration = 0
     private var replyTask: Task<Void, Never>?
     private var replyContext: AppContext?
+    private var completedTranslation: String?
+    private var streamedText = ""
+    private var streamedReply = ""
     private var requestTask: Task<Void, Never>?
     private var keyMonitors: [Any] = []
     private var trustPollTask: Task<Void, Never>?
@@ -345,6 +348,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         requestGeneration += 1
         let generation = requestGeneration
         lastCapture = capture
+        streamedText = ""
+        completedTranslation = nil
         anchor.hide()
 
         let text = capture.selection.text
@@ -385,10 +390,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             do {
                 try await LLMClient.streamChat(config: config, messages: messages, temperature: temperature) { [weak self] delta in
                     guard let self, self.requestGeneration == generation else { return }
+                    self.streamedText += delta
                     self.result.append(delta)
                 }
                 guard self.requestGeneration == generation, !Task.isCancelled else { return }
                 self.result.finish()
+                self.completedTranslation = self.streamedText
+                self.logHistory(HistoryEntry(mode: kind == .translate ? "translate" : "rewrite",
+                    appBundleID: capture.selection.bundleID, appName: context.appName,
+                    original: text, translation: self.streamedText))
             } catch {
                 guard self.requestGeneration == generation, !Task.isCancelled else { return }
                 if error is CancellationError { return }
@@ -403,6 +413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         replyTask = nil
         replyGeneration += 1
         replyContext = nil
+        completedTranslation = nil
     }
 
     private func translateReply(_ text: String) {
@@ -415,23 +426,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
-        let messages = Prompts.translate(
+        guard let capture = lastCapture, let translation = completedTranslation else { return }
+        streamedReply = ""
+        let messages = StyleContext.replyMessages(Prompts.translate(
             text: text, direction: TranslationDirection(sourceLabel: "中文", target: .english),
-            context: context, shortPhrase: false)
+            context: context, shortPhrase: false))
         replyTask = Task { @MainActor in
             do {
                 try await LLMClient.streamChat(config: config, messages: messages, temperature: 0.3) { [weak self] delta in
                     guard let self, self.replyGeneration == generation else { return }
+                    self.streamedReply += delta
                     self.result.appendReply(delta)
                 }
                 guard self.replyGeneration == generation, !Task.isCancelled else { return }
                 self.result.finishReply()
+                self.logHistory(HistoryEntry(mode: "reply", appBundleID: capture.selection.bundleID,
+                    appName: context.appName, original: capture.selection.text, translation: translation,
+                    replyZH: text, replyEN: self.streamedReply))
             } catch {
                 guard self.replyGeneration == generation, !Task.isCancelled else { return }
                 if error is CancellationError { return }
                 if let urlError = error as? URLError, urlError.code == .cancelled { return }
                 self.result.showReplyError(error.localizedDescription)
             }
+        }
+    }
+
+    private func logHistory(_ entry: HistoryEntry) {
+        do {
+            if try HistoryStore.shared.append(entry) { ProfileBuilder.shared.didLogEntry() }
+        } catch {
+            NSLog("Fanyi: history append failed: %@", error.localizedDescription)
         }
     }
 

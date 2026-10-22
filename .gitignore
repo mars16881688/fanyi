@@ -1,3 +1,10 @@
 .build/
 build/
 .swiftpm/
+.fanyi/
+history.jsonl
+profile.md
+*.p12
+*.pem
+*.key
+*.cer

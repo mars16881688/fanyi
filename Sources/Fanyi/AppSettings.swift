@@ -26,7 +26,19 @@ enum AppSettings {
             Key.showAnchor: true,
             Key.excluded: defaultExcluded,
             Key.paused: false,
+            "historyEnabled": false,
+            "useMyStyle": false,
         ])
+    }
+
+    static var historyEnabled: Bool {
+        get { store.object(forKey: "historyEnabled") as? Bool ?? false }
+        set { store.set(newValue, forKey: "historyEnabled") }
+    }
+
+    static var useMyStyle: Bool {
+        get { store.object(forKey: "useMyStyle") as? Bool ?? false }
+        set { store.set(newValue, forKey: "useMyStyle") }
     }
 
     static var baseURL: String {
