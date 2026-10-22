@@ -367,27 +367,27 @@ enum SensitiveGuard {
     static func notice(for reason: Reason) -> String {
         let again = L("如确需继续，请在 1 秒后、10 秒内再触发一次（同一快捷键或菜单）；这次内容不会记入历史。",
                       "To continue anyway, trigger it again (same shortcut or menu) after 1 and within 10 seconds; it will not be saved to history.",
-                      "続行する場合は、1 秒以上たってから 10 秒以内にもう一度実行してください（同じショートカットまたはメニュー）。履歴には残りません。")
+                      "続行する場合は、1 秒以上たってから 10 秒以内にもう一度実行してください（同じショートカットまたはメニュー）。履歴には残りません。", "그래도 계속하려면 1초 후 10초 이내에 같은 단축키나 메뉴로 다시 실행하세요. 기록에는 저장되지 않습니다.")
         switch reason {
         case .passwordApp:
             return L("这是密码类应用（或可调出密码扩展的启动器），随译不会读取其中的文字。",
                      "This is a password app (or a launcher that can show password extensions); Suiyi never reads text in it.",
-                     "パスワード管理アプリ（またはパスワード拡張機能を表示できるランチャー）のため、Suiyi はテキストを読み取りません。")
+                     "パスワード管理アプリ（またはパスワード拡張機能を表示できるランチャー）のため、Suiyi はテキストを読み取りません。", "비밀번호 앱(또는 비밀번호 확장을 표시할 수 있는 런처)입니다. Suiyi는 여기의 텍스트를 읽지 않습니다.")
         case .passwordPage:
             return L("这是密码管理扩展或密码管理页面，随译不会读取其中的文字。", "This is a password-manager extension or page; Suiyi never reads text in it.",
-                     "パスワード管理の拡張機能またはページのため、Suiyi はテキストを読み取りません。")
+                     "パスワード管理の拡張機能またはページのため、Suiyi はテキストを読み取りません。", "비밀번호 관리자 확장이나 페이지입니다. Suiyi는 여기의 텍스트를 읽지 않습니다.")
         case .extensionPage:
             return L("这是浏览器扩展页面，没有读取。", "This is a browser extension page; nothing was read. ",
-                     "ブラウザ拡張機能のページのため、読み取りませんでした。") + again
+                     "ブラウザ拡張機能のページのため、読み取りませんでした。", "브라우저 확장 페이지라 아무것도 읽지 않았습니다. ") + again
         case .codeApp:
             return L("终端和代码编辑器默认不读取（可在 设置 › 安全 中开启）。", "Terminals and code editors are off by default (Settings › Security). ",
-                     "ターミナルとコードエディタは既定で読み取りません（設定 › セキュリティ）。") + again
+                     "ターミナルとコードエディタは既定で読み取りません（設定 › セキュリティ）。", "터미널과 코드 편집기는 기본값이 꺼짐입니다 (설정 › 보안). ") + again
         case .sensitiveWindow:
             return L("当前窗口看起来涉及密码或密钥，没有读取。", "This window looks like it shows passwords or keys; nothing was read. ",
-                     "このウィンドウはパスワードやキーを表示しているようなので、読み取りませんでした。") + again
+                     "このウィンドウはパスワードやキーを表示しているようなので、読み取りませんでした。", "이 윈도우는 비밀번호나 키를 표시하는 것 같아 아무것도 읽지 않았습니다. ") + again
         case .sensitiveText:
             return L("选中的内容看起来像密码、密钥、验证码、卡号或证件号，没有发送。", "The selection looks like a password, key, code, card or ID number; nothing was sent. ",
-                     "選択内容がパスワード、キー、認証コード、カード番号または ID 番号のようなので、送信しませんでした。") + again
+                     "選択内容がパスワード、キー、認証コード、カード番号または ID 番号のようなので、送信しませんでした。", "선택한 내용이 비밀번호, 키, 코드, 카드 번호 또는 신분증 번호처럼 보여 보내지 않았습니다. ") + again
         }
     }
 

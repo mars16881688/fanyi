@@ -131,9 +131,9 @@ enum RewriteParser {
 
     static func title(at index: Int) -> String {
         switch index {
-        case 0: return L("更简洁", "Concise", "簡潔")
-        case 1: return L("更正式", "Formal", "丁寧")
-        default: return L("更口语", "Casual", "カジュアル")
+        case 0: return L("更简洁", "Concise", "簡潔", "간결하게")
+        case 1: return L("更正式", "Formal", "丁寧", "격식 있게")
+        default: return L("更口语", "Casual", "カジュアル", "편하게")
         }
     }
 

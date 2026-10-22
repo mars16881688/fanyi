@@ -48,21 +48,21 @@ enum UpdateChecker {
                 if isNewer(latest.version, than: currentVersion), let url = URL(string: latest.url),
                    url.scheme == "https" {
                     alert.messageText = L("有新版本 \(latest.version)", "Version \(latest.version) is available",
-                                          "新しいバージョン \(latest.version) があります")
+                                          "新しいバージョン \(latest.version) があります", "새 버전 \(latest.version)이(가) 있습니다")
                     let note = latest.notes?[noteKey] ?? latest.notes?["en"] ?? ""
                     alert.informativeText = L("当前版本 \(currentVersion)。", "You have \(currentVersion).",
-                                              "現在のバージョンは \(currentVersion) です。") + (note.isEmpty ? "" : "\n\n" + note)
-                    alert.addButton(withTitle: L("前往下载", "Get Update", "ダウンロード"))
-                    alert.addButton(withTitle: L("稍后", "Later", "あとで"))
+                                              "現在のバージョンは \(currentVersion) です。", "현재 버전은 \(currentVersion)입니다.") + (note.isEmpty ? "" : "\n\n" + note)
+                    alert.addButton(withTitle: L("前往下载", "Get Update", "ダウンロード", "다운로드"))
+                    alert.addButton(withTitle: L("稍后", "Later", "あとで", "나중에"))
                     NSApp.activate(ignoringOtherApps: true)
                     if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(url) }
                     return
                 }
-                alert.messageText = L("已是最新版本", "You're up to date", "最新バージョンです")
-                alert.informativeText = L("随译 \(currentVersion)", "Suiyi \(currentVersion)", "Suiyi \(currentVersion)")
+                alert.messageText = L("已是最新版本", "You're up to date", "最新バージョンです", "최신 버전입니다")
+                alert.informativeText = L("随译 \(currentVersion)", "Suiyi \(currentVersion)", "Suiyi \(currentVersion)", "Suiyi \(currentVersion)")
             } catch {
                 alert.alertStyle = .warning
-                alert.messageText = L("检查更新失败", "Couldn't check for updates", "アップデートを確認できませんでした")
+                alert.messageText = L("检查更新失败", "Couldn't check for updates", "アップデートを確認できませんでした", "업데이트를 확인하지 못했습니다")
                 alert.informativeText = LLMError.userMessage(for: error)
             }
             NSApp.activate(ignoringOtherApps: true)
@@ -75,6 +75,7 @@ enum UpdateChecker {
         case .zh: return "zh"
         case .en: return "en"
         case .ja: return "ja"
+        case .ko: return "ko"
         }
     }
 }
