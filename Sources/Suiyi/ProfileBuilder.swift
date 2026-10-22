@@ -31,6 +31,9 @@ final class ProfileBuilder: ObservableObject {
                 ("模式", entry.mode), ("原文", entry.original), ("译文/改写", entry.translation),
                 ("我写的回复", entry.replyZH), ("发出的回复", entry.replyEN)
             ]
+            // 0.2.1.k.01: entries that look like they hold a secret (including ones written before
+            // this version) are never sent to the model.
+            if fields.dropFirst().contains(where: { $0.1.map(SensitiveGuard.looksSensitive) ?? false }) { continue }
             let block = fields.compactMap { name, value -> String? in
                 guard let value else { return nil }
                 return "\(name)：\(String(value.prefix(400)))"

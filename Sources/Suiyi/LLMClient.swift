@@ -18,9 +18,25 @@ struct LLMConfig: Sendable {
         if !base.lowercased().hasSuffix("/chat/completions") {
             base += "/chat/completions"
         }
-        guard let url = URL(string: base), let scheme = url.scheme?.lowercased(),
-              scheme == "https" || scheme == "http" else { return nil }
-        return url
+        guard let url = URL(string: base), let scheme = url.scheme?.lowercased(), url.host != nil else { return nil }
+        // 0.2.1.k.01: the key and the text never travel unencrypted: https only, plain http only
+        // to this Mac (e.g. a local Ollama).
+        if scheme == "https" { return url }
+        if scheme == "http", let host = url.host?.lowercased(), ["localhost", "127.0.0.1", "::1"].contains(host) {
+            return url
+        }
+        return nil
+    }
+}
+
+/// 0.2.1.k.01: requests carrying the API key and the selected text never follow a redirect to
+/// another URL; the configured endpoint must answer directly.
+final class NoRedirects: NSObject, URLSessionTaskDelegate {
+    static let shared = NoRedirects()
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        nil
     }
 }
 
@@ -38,7 +54,7 @@ enum LLMError: LocalizedError {
                      "No API key yet. Click the menu bar icon → Settings… and save one.",
                      "API キーが未設定です。メニューバーのアイコン → 設定… で保存してください。")
         case .badURL(let value):
-            return L("Base URL 无效：\(value)", "Invalid Base URL: \(value)", "Base URL が無効です：\(value)")
+            return L("Base URL 无效：\(value)（只接受 https；http 仅限本机地址）", "Invalid Base URL: \(value) (https only; http only for this Mac)", "Base URL が無効です：\(value)（https のみ。http はこの Mac のアドレスに限ります）")
         case .http(let code, let body):
             let snippet = String(body.trimmed.prefix(160))
             let detail = snippet.isEmpty ? "HTTP \(code)" : "HTTP \(code)：\(snippet)"
@@ -172,7 +188,7 @@ enum LLMClient {
                            onDelta: @escaping @MainActor @Sendable (String) -> Void) async throws {
         let request = try makeRequest(config: config, messages: messages, temperature: temperature,
                                       stream: true, maxTokens: nil)
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let (bytes, response) = try await URLSession.shared.bytes(for: request, delegate: NoRedirects.shared)
         guard let http = response as? HTTPURLResponse else {
             throw LLMError.api(L("无效的响应", "Invalid response", "無効な応答"))
         }
@@ -233,7 +249,7 @@ enum LLMClient {
             stream: false,
             maxTokens: 8
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request, delegate: NoRedirects.shared)
         guard let http = response as? HTTPURLResponse else { throw LLMError.api(L("无效的响应", "Invalid response", "無効な応答")) }
         let body = String(data: data, encoding: .utf8) ?? ""
         guard (200..<300).contains(http.statusCode) else {
