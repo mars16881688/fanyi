@@ -25,6 +25,7 @@ final class AnchorController: NSObject {
     private let rewriteButton: GlassButton
 
     private var expanded = false
+    private var shown = false
     private var topLeft = NSPoint.zero
     private var hideTask: Task<Void, Never>?
     private var hoverTask: Task<Void, Never>?
@@ -42,8 +43,8 @@ final class AnchorController: NSObject {
         circle = RoundedMaterialView(frame: square)
         bubble = GlassButton(title: "", symbol: "character.bubble", style: .plain, target: nil, action: nil)
         choices = RoundedMaterialView(frame: .zero)
-        translateButton = GlassButton(title: "翻译", symbol: "character.book.closed", target: nil, action: nil)
-        rewriteButton = GlassButton(title: "改写", symbol: "pencil.line", target: nil, action: nil)
+        translateButton = GlassButton(title: L("翻译", "Translate", "翻訳"), symbol: "character.book.closed", target: nil, action: nil)
+        rewriteButton = GlassButton(title: L("改写", "Rewrite", "書き換え"), symbol: "pencil.line", target: nil, action: nil)
         super.init()
         configure()
     }
@@ -59,8 +60,8 @@ final class AnchorController: NSObject {
         bubble.frame = NSRect(x: 0, y: 0, width: size, height: size)
         bubble.tint = .controlAccentColor
         bubble.iconPointSize = 15
-        bubble.setAccessibilityLabel("随译")
-        bubble.toolTip = "随译：翻译 / 改写"
+        bubble.setAccessibilityLabel(L("随译", "Suiyi", "Suiyi"))
+        bubble.toolTip = L("随译：翻译 / 改写", "Suiyi: Translate / Rewrite", "Suiyi：翻訳 / 書き換え")
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
         circle.addSubview(bubble)
@@ -73,8 +74,8 @@ final class AnchorController: NSObject {
         translateButton.action = #selector(pickTranslate(_:))
         rewriteButton.target = self
         rewriteButton.action = #selector(pickRewrite(_:))
-        translateButton.toolTip = "翻译（⌥⌘T）"
-        rewriteButton.toolTip = "改写（⌥⌘R）"
+        translateButton.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）")
+        rewriteButton.toolTip = L("改写（⌥⌘R）", "Rewrite (⌥⌘R)", "書き換え（⌥⌘R）")
         choices.addSubview(translateButton)
         choices.addSubview(rewriteButton)
 
@@ -92,12 +93,14 @@ final class AnchorController: NSObject {
         let size = AnchorController.bubbleSize
         applySize(NSSize(width: size, height: size))
         panel.orderFrontRegardless()
+        shown = true
         scheduleHide()
     }
 
     func hide() {
         cancelTimers()
         expanded = false
+        shown = false
         panel.orderOut(nil)
     }
 
@@ -124,7 +127,7 @@ final class AnchorController: NSObject {
     }
 
     func expand() {
-        guard !expanded, panel.isVisible else { return }
+        guard !expanded, shown else { return }
         expanded = true
         hoverTask?.cancel()
         hideTask?.cancel()

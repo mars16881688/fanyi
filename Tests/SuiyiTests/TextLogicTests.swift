@@ -4,33 +4,59 @@ import Testing
 
 @Suite("LanguageDetector")
 struct LanguageDetectorTests {
-    @Test("Auto: English goes to Chinese")
-    func englishToChinese() {
-        let direction = LanguageDetector.direction(for: "Could we move the meeting to Thursday?", preference: .auto)
-        #expect(direction.sourceLabel == "EN")
-        #expect(direction.target == .simplifiedChinese)
+    private static let english = "Could we move the meeting to Thursday?"
+    private static let chinese = "我们周四开会可以吗？"
+    private static let japanese = "明日の会議は何時からですか？"
+
+    @Test("Detects the three working languages")
+    func detects() {
+        #expect(LanguageDetector.detect(Self.english) == .english)
+        #expect(LanguageDetector.detect(Self.chinese) == .chinese)
+        #expect(LanguageDetector.detect(Self.japanese) == .japanese)
+        #expect(LanguageDetector.detect("   ") == nil)
     }
 
-    @Test("Auto: Chinese goes to English")
-    func chineseToEnglish() {
-        let direction = LanguageDetector.direction(for: "我们周四开会可以吗？", preference: .auto)
-        #expect(direction.sourceLabel == "中文")
-        #expect(direction.target == .english)
+    @Test("Any pair: foreign text goes into my language, mine goes out", arguments: [
+        // (text, mine, outgoing, expected target)
+        (english, Language.chinese, Language.english, Language.chinese),
+        (japanese, .chinese, .english, .chinese),
+        (chinese, .chinese, .english, .english),
+        (chinese, .chinese, .japanese, .japanese),
+        (chinese, .english, .chinese, .english),
+        (japanese, .english, .chinese, .english),
+        (english, .english, .japanese, .japanese),
+        (english, .japanese, .english, .japanese),
+        (chinese, .japanese, .english, .japanese),
+        (japanese, .japanese, .chinese, .chinese),
+    ])
+    func pairs(text: String, mine: Language, outgoing: Language, expected: Language) {
+        #expect(LanguageDetector.direction(for: text, mine: mine, outgoing: outgoing).target == expected)
     }
 
-    @Test("Auto: Japanese goes to Chinese")
-    func japaneseToChinese() {
-        let direction = LanguageDetector.direction(for: "明日の会議は何時からですか？", preference: .auto)
-        #expect(direction.sourceLabel == "日本語")
-        #expect(direction.target == .simplifiedChinese)
+    @Test("Replies go back in the sender's language")
+    func replies() throws {
+        let fromJapanese = LanguageDetector.direction(for: Self.japanese, mine: .chinese, outgoing: .english)
+        let reply = try #require(LanguageDetector.replyDirection(for: fromJapanese, mine: .chinese))
+        #expect(reply.source == .chinese && reply.target == .japanese)
+
+        let fromChinese = LanguageDetector.direction(for: Self.chinese, mine: .english, outgoing: .japanese)
+        #expect(try #require(LanguageDetector.replyDirection(for: fromChinese, mine: .english)).target == .chinese)
+
+        let outgoing = LanguageDetector.direction(for: Self.chinese, mine: .chinese, outgoing: .english)
+        #expect(LanguageDetector.replyDirection(for: outgoing, mine: .chinese) == nil)
+        let unknown = TranslationDirection(source: nil, target: .chinese)
+        #expect(LanguageDetector.replyDirection(for: unknown, mine: .chinese) == nil)
     }
 
-    @Test("A fixed target equal to the source flips to the other side")
-    func fixedTargetFlips() {
-        let direction = LanguageDetector.direction(for: "The build passed on CI today.", preference: .english)
-        #expect(direction.target == .simplifiedChinese)
-        let toJapanese = LanguageDetector.direction(for: "The build passed on CI today.", preference: .japanese)
-        #expect(toJapanese.target == .japanese)
+    @Test("NaturalLanguage mapping and prompt names")
+    func mapping() {
+        #expect(Language(.traditionalChinese) == .chinese)
+        #expect(Language(.simplifiedChinese) == .chinese)
+        #expect(Language(.undetermined) == nil)
+        #expect(Language(.french)?.code == "fr")
+        #expect(Language(code: "fr").promptName == "French")
+        #expect(Language.japanese.promptName.contains("Japanese"))
+        #expect(Language.selectable == [.chinese, .english, .japanese])
     }
 
     @Test("Script counting")
@@ -40,6 +66,52 @@ struct LanguageDetectorTests {
         #expect(counts.han == 2)
         #expect(counts.kana == 2)
         #expect(counts.hangul == 1)
+    }
+}
+
+@Suite("Language settings")
+struct LanguageSettingsTests {
+    @Test("Stored choices win")
+    func stored() {
+        let result = AppSettings.languages(mine: "ja", outgoing: "zh", legacyTarget: "auto", preferred: ["en-US"])
+        #expect(result.mine == .japanese && result.outgoing == .chinese)
+    }
+
+    @Test("Migrates the old targetLanguage setting", arguments: [
+        ("auto", Language.chinese, Language.english),
+        ("simplifiedChinese", .chinese, .english),
+        ("english", .english, .chinese),
+        ("japanese", .japanese, .english),
+    ])
+    func legacy(raw: String, mine: Language, outgoing: Language) {
+        let result = AppSettings.languages(mine: nil, outgoing: nil, legacyTarget: raw, preferred: ["fr-FR"])
+        #expect(result.mine == mine && result.outgoing == outgoing)
+    }
+
+    @Test("Fresh installs follow the system language", arguments: [
+        (["ja-JP", "en-US"], Language.japanese, Language.english),
+        (["zh-Hans-CN"], .chinese, .english),
+        (["en-GB"], .english, .chinese),
+        (["de-DE"], .english, .chinese),
+    ])
+    func system(preferred: [String], mine: Language, outgoing: Language) {
+        let result = AppSettings.languages(mine: nil, outgoing: nil, legacyTarget: nil, preferred: preferred)
+        #expect(result.mine == mine && result.outgoing == outgoing)
+    }
+
+    @Test("Outgoing never equals my language; unknown codes are ignored")
+    func neverSame() {
+        #expect(AppSettings.languages(mine: "en", outgoing: "en", legacyTarget: nil, preferred: []).outgoing == .chinese)
+        #expect(AppSettings.languages(mine: "zh", outgoing: "zh", legacyTarget: nil, preferred: []).outgoing == .english)
+        let unknown = AppSettings.languages(mine: "xx", outgoing: "yy", legacyTarget: nil, preferred: ["ja"])
+        #expect(unknown.mine == .japanese && unknown.outgoing == .english)
+    }
+
+    @Test("Interface language resolution", arguments: [
+        (["zh-Hant-TW"], UILanguage.zh), (["ja"], .ja), (["en-US"], .en), (["ko-KR", "ja-JP"], .ja), ([String](), .en),
+    ])
+    func uiLanguage(preferred: [String], expected: UILanguage) {
+        #expect(UILanguage.resolve(preferred) == expected)
     }
 }
 
@@ -58,7 +130,7 @@ struct PromptTests {
 
     @Test("Translate prompt carries target, context and the raw text")
     func translatePrompt() {
-        let direction = TranslationDirection(sourceLabel: "EN", target: .simplifiedChinese)
+        let direction = TranslationDirection(source: .english, target: .chinese)
         let messages = Prompts.translate(text: "ship it Friday", direction: direction, context: context, shortPhrase: false)
         #expect(messages.count == 2)
         #expect(messages[0].role == "system")
@@ -89,7 +161,7 @@ struct RewriteParserTests {
     func basic() throws {
         let raw = "[简洁] 进展如何？\n[正式] 请问目前进展如何？\n[口语] 咋样了？"
         let variants = try #require(RewriteParser.parse(raw))
-        #expect(variants.map(\.title) == ["更简洁", "更正式", "更口语"])
+        #expect(variants.map(\.title) == (0..<3).map(RewriteParser.title(at:)))
         #expect(variants[1].text == "请问目前进展如何？")
     }
 
