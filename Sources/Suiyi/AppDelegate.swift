@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LegacyMigration.runIfNeeded()
         AppSettings.registerDefaults()
         paused = AppSettings.paused
 
@@ -101,9 +102,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let mainMenu = NSMenu()
 
         let appItem = NSMenuItem()
-        let appMenu = NSMenu(title: "Fanyi")
+        let appMenu = NSMenu(title: "随译")
         appMenu.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        appMenu.addItem(withTitle: "退出 Fanyi", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出随译", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
 
@@ -134,13 +135,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            if let image = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "Fanyi") {
+            if let image = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "随译") {
                 image.isTemplate = true
                 button.image = image
             } else {
                 button.title = "译"
             }
-            button.toolTip = "Fanyi"
+            button.toolTip = "随译"
         }
 
         let menu = NSMenu()
@@ -211,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.triggerDirect(.rewrite, delayNanos: 0)
         }
         if !okT || !okR {
-            NSLog("Fanyi: some global hot keys could not be registered (already in use?)")
+            NSLog("Suiyi: some global hot keys could not be registered (already in use?)")
         }
     }
 
@@ -318,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
             startTrustPolling()
-            result.showNotice("需要辅助功能权限：系统设置 › 隐私与安全性 › 辅助功能，打开 Fanyi。", at: point)
+            result.showNotice("需要辅助功能权限：系统设置 › 隐私与安全性 › 辅助功能，打开随译。", at: point)
             return
         }
         selectionGeneration += 1
@@ -456,7 +457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             if try HistoryStore.shared.append(entry) { ProfileBuilder.shared.didLogEntry() }
         } catch {
-            NSLog("Fanyi: history append failed: %@", error.localizedDescription)
+            NSLog("Suiyi: history append failed: %@", error.localizedDescription)
         }
     }
 

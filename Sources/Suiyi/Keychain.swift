@@ -1,13 +1,15 @@
 import Foundation
 import Security
 
-/// Stores the API key as a generic password (service ai.mars.fanyi).
+/// Stores the API key as a generic password (service ai.mars.suiyi).
 /// The value is cached in memory after the first successful read so the
 /// Keychain is not queried on every request.
 @MainActor
 enum Keychain {
-    static let service = "ai.mars.fanyi"
+    static let service = "ai.mars.suiyi"
     static let account = "api-key"
+    /// Service used before the rename to 随译. Read once during migration, never written.
+    static let legacyService = "ai.mars.fanyi"
 
     private static var cachedKey: String?
     private static var didLoad = false
@@ -45,6 +47,23 @@ enum Keychain {
         return cachedKey
     }
 
+    /// Returns the key stored by the pre-rename Fanyi app, if any. macOS may ask
+    /// the user once to allow access, because the item belongs to the old app.
+    static func legacyAPIKey() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: legacyService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data, let key = String(data: data, encoding: .utf8)?.trimmed,
+              !key.isEmpty else { return nil }
+        return key
+    }
+
     /// Saves (or, for an empty string, deletes) the key. Returns an OSStatus.
     @discardableResult
     static func setAPIKey(_ newValue: String) -> OSStatus {
@@ -65,7 +84,7 @@ enum Keychain {
             var add = baseQuery()
             add[kSecValueData as String] = data
             add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            add[kSecAttrLabel as String] = "Fanyi API Key"
+            add[kSecAttrLabel as String] = "随译 API Key"
             status = SecItemAdd(add as CFDictionary, nil)
         }
         if status == errSecSuccess {

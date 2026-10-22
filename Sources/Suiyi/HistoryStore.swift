@@ -20,9 +20,9 @@ struct HistoryEntry: Codable, Sendable {
 /// All file operations share this queue, including reads and truncation.
 final class HistoryStore: @unchecked Sendable {
     static let shared = HistoryStore()
-    let folderURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".fanyi", isDirectory: true)
+    let folderURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".suiyi", isDirectory: true)
     var fileURL: URL { folderURL.appendingPathComponent("history.jsonl") }
-    private let queue = DispatchQueue(label: "ai.mars.fanyi.history")
+    private let queue = DispatchQueue(label: "ai.mars.suiyi.history")
 
     func ensureFolder() throws {
         try queue.sync { try prepareFolder() }
@@ -138,7 +138,7 @@ enum LocalFile {
         let attributes = try? fm.attributesOfItem(atPath: url.path)
         let existingMode = (attributes?[.posixPermissions] as? NSNumber)?.intValue
         let mode = preservePermissions ? (existingMode ?? permissions) : permissions
-        let temporary = url.deletingLastPathComponent().appendingPathComponent(".fanyi-\(UUID().uuidString).tmp")
+        let temporary = url.deletingLastPathComponent().appendingPathComponent(".suiyi-\(UUID().uuidString).tmp")
         defer { try? fm.removeItem(at: temporary) }
         guard fm.createFile(atPath: temporary.path, contents: nil, attributes: [.posixPermissions: mode]) else {
             throw CocoaError(.fileWriteUnknown)
