@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsWindow = SettingsWindowController()
 
         anchor.onPick = { [weak self] kind in self?.anchorPicked(kind) }
+        anchor.onCopy = { [weak self] in self?.copyPendingSelection() }
         result.onReplyTranslate = { [weak self] text in self?.translateReply(text) }
         result.onSwitchKind = { [weak self] kind in self?.switchKind(kind) }
         result.onClose = { [weak self] in self?.closeResult() }
@@ -415,6 +416,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func block(_ key: SensitiveGuard.ConfirmGate.Key, at point: NSPoint) {
         confirmGate.arm(key)
         result.showNotice(SensitiveGuard.notice(for: key.reason), at: point)
+    }
+
+    /// 0.2.1.k.06: right-click / two-finger click on the button copies the selection, exactly like
+    /// ⌘C in the app (full text and formatting). If the app has lost focus meanwhile, the text Suiyi
+    /// read is copied instead (trimmed, at most 4,000 characters). Nothing is sent to the model.
+    private func copyPendingSelection() {
+        guard let capture = pendingCapture else { return }
+        Task { @MainActor in
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == capture.selection.pid,
+               await Clipboard.copyForUser() { return }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(capture.selection.text, forType: .string)
+        }
     }
 
     private func anchorPicked(_ kind: ActionKind) {
