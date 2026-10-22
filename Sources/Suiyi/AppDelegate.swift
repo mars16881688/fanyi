@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var replyContext: AppContext?
     private var replyDirection: TranslationDirection?
     private var completedTranslation: String?
+    /// Finished outputs for the current selection, so switching tabs back and forth does not re-request.
+    private var cachedOutputs: [ActionKind: String] = [:]
     private var streamedText = ""
     private var streamedReply = ""
     private var requestTask: Task<Void, Never>?
@@ -56,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         anchor.onPick = { [weak self] kind in self?.anchorPicked(kind) }
         result.onReplyTranslate = { [weak self] text in self?.translateReply(text) }
+        result.onSwitchKind = { [weak self] kind in self?.switchKind(kind) }
         result.onClose = { [weak self] in self?.closeResult() }
         result.onReplace = { [weak self] text in self?.replaceSelection(with: text) }
         monitor.onMouseDown = { [weak self] point in self?.mouseDown(at: point) }
@@ -335,6 +338,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         run(kind, capture: capture, at: anchor.referencePoint)
     }
 
+    /// The card's 翻译 / 改写 tabs: same selection, same card position.
+    private func switchKind(_ kind: ActionKind) {
+        guard let capture = lastCapture, result.isVisible else { return }
+        run(kind, capture: capture, at: NSPoint(x: result.frame.minX, y: result.frame.maxY), sameSelection: true)
+    }
+
     // MARK: - Hot key / menu flow
 
     private func triggerDirect(_ kind: ActionKind, delayNanos: UInt64) {
@@ -370,8 +379,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Running a request
 
-    private func run(_ kind: ActionKind, capture: Capture, at point: NSPoint) {
+    private func run(_ kind: ActionKind, capture: Capture, at point: NSPoint, sameSelection: Bool = false) {
         cancelReply()
+        if !sameSelection { cachedOutputs = [:] }
         requestTask?.cancel()
         requestGeneration += 1
         let generation = requestGeneration
@@ -408,7 +418,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         result.present(kind: kind, header: header, editable: capture.selection.editable,
-                       shortPhrase: shortPhrase, at: point, reply: reply)
+                       shortPhrase: shortPhrase, at: point, reply: reply, keepPosition: sameSelection)
+
+        if sameSelection, let cached = cachedOutputs[kind] {
+            streamedText = cached
+            result.append(cached)
+            result.finish()
+            completedTranslation = cached
+            return
+        }
 
         guard let key = Keychain.apiKey(), !key.isEmpty else {
             result.showError(LLMError.missingKey.errorDescription ?? "Missing API key")
@@ -426,6 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard self.requestGeneration == generation, !Task.isCancelled else { return }
                 self.result.finish()
                 self.completedTranslation = self.streamedText
+                self.cachedOutputs[kind] = self.streamedText
                 self.logHistory(HistoryEntry(mode: kind == .translate ? "translate" : "rewrite",
                     appBundleID: capture.selection.bundleID, appName: context.appName,
                     original: text, translation: self.streamedText))
