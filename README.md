@@ -61,6 +61,12 @@ SUIYI_SIGN_IDENTITY="Developer ID Application: <名称> (<TEAMID>)" SUIYI_NOTARY
 
 官网下载按钮固定指向 `https://github.com/mars16881688/fanyi-site/releases/latest/download/Suiyi.zip`，发新版不用改链接。
 
+## 反馈与自动处理
+
+- 菜单 **反馈…**：选择「问题 / 建议」并描述，点「在 GitHub 提交」会在浏览器打开预填好的 issue（公开仓库 `mars16881688/fanyi-site`），由用户确认提交；也可「发邮件」。只附带版本号、macOS 版本和语言设置，不附带任何选中文字。
+- 每天一次的 Claude Code 云端定时任务读取新反馈：判断是否有效、分类打标签并回复；可修复的在本仓库开 `feedback/<编号>` 分支的 PR，不会合并。
+- `.github/workflows/test.yml` 在每个 PR 上用 macOS 运行 `swift test`，合并前看 CI 结果。
+
 ## 图标
 
 `Resources/AppIcon.iconset` 由 `swift scripts/make-icon.swift Resources` 以矢量逐尺寸渲染（16 px 到 1024 px 各自按原生像素绘制，小尺寸去阴影、加描边），`build.sh` 直接用它生成 `AppIcon.icns`。改图标设计后重新运行该脚本。
