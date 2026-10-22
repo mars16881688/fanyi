@@ -1,7 +1,5 @@
 #!/bin/bash
-# Build Fanyi.app (release) and ad-hoc sign it.
-# Optional: SIGN_ID="My Local Codesign Cert" ./build.sh  to sign with a stable
-# local identity instead of ad-hoc ("-").
+# Build Fanyi.app (release) with a stable local identity when available.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -63,6 +61,34 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
-codesign --force --deep -s "${SIGN_ID:--}" --identifier ai.mars.fanyi "$APP"
+SIGN_IDENTITY="${FANYI_SIGN_IDENTITY:-${SIGN_ID:-Fanyi Local Signing}}"
+SIGN_KEYCHAIN="${FANYI_SIGN_KEYCHAIN:-$HOME/Library/Keychains/fanyi-signing.keychain-db}"
+SIGN_ARGS=(-s -)
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+    HASH=""
+    # 1) Dedicated keychain created by scripts/create-signing-cert.sh (no GUI prompts).
+    if [[ -f "$SIGN_KEYCHAIN" ]]; then
+        PW="$(security find-generic-password -s fanyi-signing-keychain -a "$USER" -w 2>/dev/null || true)"
+        [[ -n "$PW" ]] && security unlock-keychain -p "$PW" "$SIGN_KEYCHAIN" 2>/dev/null || true
+        HASH="$(security find-identity -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null \
+            | grep -F "\"$SIGN_IDENTITY\"" | head -1 | awk '{print $2}')"
+        [[ -n "$HASH" ]] && SIGN_ARGS=(-s "$HASH" --keychain "$SIGN_KEYCHAIN")
+    fi
+    # 2) Any other keychain in the search list (e.g. a certificate you created yourself).
+    if [[ -z "$HASH" ]]; then
+        HASH="$(security find-identity -p codesigning 2>/dev/null \
+            | grep -F "\"$SIGN_IDENTITY\"" | head -1 | awk '{print $2}')"
+        [[ -n "$HASH" ]] && SIGN_ARGS=(-s "$HASH")
+    fi
+    if [[ -z "$HASH" ]]; then
+        echo "警告：未找到代码签名身份 '$SIGN_IDENTITY'，将使用 ad-hoc 签名；重新构建可能需要重新授权辅助功能。" >&2
+        echo "请先运行 scripts/create-signing-cert.sh 创建稳定签名身份。" >&2
+        SIGN_IDENTITY="-"
+    fi
+fi
+echo "Signing identity: $SIGN_IDENTITY ${HASH:-}"
+# Certificate identities get codesign's default designated requirement
+# (identifier + certificate leaf hash), which does not change between builds.
+codesign --force --deep "${SIGN_ARGS[@]}" --identifier ai.mars.fanyi "$APP"
 
 echo "Built: $(pwd)/$APP"
