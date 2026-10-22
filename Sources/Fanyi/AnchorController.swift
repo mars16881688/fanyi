@@ -12,7 +12,7 @@ final class AnchorController: NSObject {
     var onPick: (@MainActor (ActionKind) -> Void)?
     private(set) var referencePoint = NSPoint.zero
 
-    private static let bubbleSize: CGFloat = 26
+    private static let bubbleSize: CGFloat = 30
     private static let autoHideSeconds: UInt64 = 4
     private static let hoverDelay: UInt64 = 350_000_000
 
@@ -33,13 +33,13 @@ final class AnchorController: NSObject {
     var frame: NSRect { panel.frame }
 
     override init() {
-        let size: CGFloat = 26
+        let size: CGFloat = 30
         let square = NSRect(x: 0, y: 0, width: size, height: size)
         panel = FloatingPanel.make(size: square.size, allowsKey: false)
         root = HoverView(frame: square)
-        circle = NSView(frame: square)
+        circle = RoundedSurfaceView(frame: square)
         bubble = FirstMouseButton(frame: square)
-        choices = NSVisualEffectView(frame: .zero)
+        choices = RoundedMaterialView(frame: .zero)
         translateButton = FirstMouseButton(title: "翻译", target: nil, action: nil)
         rewriteButton = FirstMouseButton(title: "改写", target: nil, action: nil)
         super.init()
@@ -51,11 +51,10 @@ final class AnchorController: NSObject {
         root.autoresizingMask = [.width, .height]
         panel.contentView = root
 
-        circle.wantsLayer = true
-        circle.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        circle.layer?.cornerRadius = size / 2
-        circle.layer?.borderWidth = 1
-        circle.layer?.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
+        if let surface = circle as? RoundedSurfaceView {
+            surface.radius = size / 2
+            surface.accent = true
+        }
         root.addSubview(circle)
 
         bubble.isBordered = false
@@ -68,7 +67,7 @@ final class AnchorController: NSObject {
         } else {
             bubble.title = "译"
         }
-        bubble.contentTintColor = .white
+        bubble.contentTintColor = .selectedMenuItemTextColor
         bubble.toolTip = "Fanyi：翻译 / 改写"
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
@@ -78,7 +77,8 @@ final class AnchorController: NSObject {
         choices.blendingMode = .behindWindow
         choices.state = .active
         choices.wantsLayer = true
-        choices.layer?.cornerRadius = 8
+        choices.layer?.cornerRadius = 18
+        (choices as? RoundedMaterialView)?.radius = 18
         choices.layer?.masksToBounds = true
         choices.isHidden = true
         root.addSubview(choices)
@@ -87,6 +87,16 @@ final class AnchorController: NSObject {
         translateButton.action = #selector(pickTranslate(_:))
         rewriteButton.target = self
         rewriteButton.action = #selector(pickRewrite(_:))
+        for (button, symbol) in [(translateButton, "character.book.closed"), (rewriteButton, "pencil.line")] {
+            button.bezelStyle = .inline
+            button.font = .systemFont(ofSize: 12, weight: .medium)
+            button.image = FanyiStyle.symbol(symbol, description: button.title)
+            button.imagePosition = .imageLeading
+            button.imageHugsTitle = true
+            button.contentTintColor = .controlAccentColor
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 12
+        }
         choices.addSubview(translateButton)
         choices.addSubview(rewriteButton)
 
@@ -143,9 +153,9 @@ final class AnchorController: NSObject {
         translateButton.sizeToFit()
         rewriteButton.sizeToFit()
         let pad: CGFloat = 5
-        let height = max(translateButton.frame.height, rewriteButton.frame.height)
-        let w1 = max(58, translateButton.frame.width)
-        let w2 = max(58, rewriteButton.frame.width)
+        let height = max(26, max(translateButton.frame.height, rewriteButton.frame.height))
+        let w1 = max(72, translateButton.frame.width)
+        let w2 = max(72, rewriteButton.frame.width)
         let size = NSSize(width: pad * 3 + w1 + w2, height: height + pad * 2)
         translateButton.frame = NSRect(x: pad, y: pad, width: w1, height: height)
         rewriteButton.frame = NSRect(x: pad * 2 + w1, y: pad, width: w2, height: height)
