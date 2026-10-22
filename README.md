@@ -33,6 +33,10 @@ cd fanyi  # 仓库目录名暂未改
 
 产物：`build/Suiyi.app`（App 图标由 `Resources/AppIcon.png` 在构建时生成 `AppIcon.icns`）（bundle id `ai.mars.suiyi`；优先使用稳定本地签名，身份不存在时回退 ad-hoc）。
 
+## 图标
+
+`Resources/AppIcon.iconset` 由 `swift scripts/make-icon.swift Resources` 以矢量逐尺寸渲染（16 px 到 1024 px 各自按原生像素绘制，小尺寸去阴影、加描边），`build.sh` 直接用它生成 `AppIcon.icns`。改图标设计后重新运行该脚本。
+
 ## 测试
 
 ```bash

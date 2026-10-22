@@ -104,3 +104,20 @@ struct GlassButtonTests {
         }
     }
 }
+
+@Suite("App icon assets")
+struct AppIconTests {
+    private static let iconset = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Resources/AppIcon.iconset")
+
+    @Test("Every size is present and rendered at its native pixel size", arguments: [16, 32, 128, 256, 512])
+    func sizes(base: Int) throws {
+        for (suffix, pixels) in [("", base), ("@2x", base * 2)] {
+            let url = Self.iconset.appendingPathComponent("icon_\(base)x\(base)\(suffix).png")
+            let rep = try #require(NSBitmapImageRep(data: try Data(contentsOf: url)), "\(url.lastPathComponent)")
+            #expect(rep.pixelsWide == pixels && rep.pixelsHigh == pixels)
+            #expect(rep.hasAlpha)
+        }
+    }
+}
