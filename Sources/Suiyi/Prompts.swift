@@ -81,6 +81,19 @@ enum Prompts {
     }
 }
 
+/// What Copy / Replace act on. For a short term the model returns
+/// "translation \n note"; only the first line is the translation.
+enum TranslationOutput {
+    static func primary(_ raw: String, isTranslation: Bool, shortPhrase: Bool) -> String {
+        let text = raw.trimmed
+        if isTranslation, shortPhrase,
+           let first = text.split(separator: "\n", omittingEmptySubsequences: true).first {
+            return String(first).trimmed
+        }
+        return text
+    }
+}
+
 struct RewriteVariant {
     let title: String
     let text: String

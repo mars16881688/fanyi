@@ -158,8 +158,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         accessibilityItem = access
         menu.addItem(.separator())
         menu.addItem(makeItem("设置…", #selector(openSettings(_:)), key: ","))
+        menu.addItem(makeItem("关于随译", #selector(showAbout(_:))))
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "退出随译", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
 
@@ -190,6 +191,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openSettings(_ sender: Any?) {
         settingsWindow.show()
+    }
+
+    @objc private func showAbout(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "随译",
+            .credits: NSAttributedString(string: "Mac 全局翻译助手 · 无遥测，请求只发往你配置的接口。",
+                                         attributes: [.font: NSFont.systemFont(ofSize: 11),
+                                                      .foregroundColor: NSColor.secondaryLabelColor]),
+        ])
     }
 
     @objc private func openAccessibilitySettings(_ sender: Any?) {
@@ -373,13 +384,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             messages = Prompts.translate(text: text, direction: direction, context: context, shortPhrase: shortPhrase)
             temperature = 0.3
         case .rewrite:
-            header = "改写（保持原语言）  ·  \(context.appName)"
+            header = "保持原语言  ·  \(context.appName)"
             messages = Prompts.rewrite(text: text, context: context)
             temperature = 0.7
         }
 
         result.present(kind: kind, header: header, editable: capture.selection.editable,
-                       shortPhrase: shortPhrase, at: point, originalText: replyOriginal)
+                       shortPhrase: shortPhrase, at: point, offersReply: replyOriginal != nil)
 
         guard let key = Keychain.apiKey(), !key.isEmpty else {
             result.showError(LLMError.missingKey.errorDescription ?? "Missing API key")
@@ -404,7 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard self.requestGeneration == generation, !Task.isCancelled else { return }
                 if error is CancellationError { return }
                 if let urlError = error as? URLError, urlError.code == .cancelled { return }
-                self.result.showError(error.localizedDescription)
+                self.result.showError(LLMError.userMessage(for: error))
             }
         }
     }
@@ -448,7 +459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard self.replyGeneration == generation, !Task.isCancelled else { return }
                 if error is CancellationError { return }
                 if let urlError = error as? URLError, urlError.code == .cancelled { return }
-                self.result.showReplyError(error.localizedDescription)
+                self.result.showReplyError(LLMError.userMessage(for: error))
             }
         }
     }

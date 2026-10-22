@@ -38,13 +38,72 @@ enum LLMError: LocalizedError {
         case .badURL(let value):
             return "Base URL 无效：\(value)"
         case .http(let code, let body):
-            let snippet = body.trimmed
-            return snippet.isEmpty ? "HTTP \(code)" : "HTTP \(code)：\(snippet)"
+            let snippet = String(body.trimmed.prefix(160))
+            let detail = snippet.isEmpty ? "HTTP \(code)" : "HTTP \(code)：\(snippet)"
+            guard let hint = Self.hint(forStatus: code) else { return detail }
+            return "\(hint)（\(detail)）"
         case .api(let message):
             return "服务返回错误：\(message)"
         case .emptyResponse:
             return "服务没有返回任何内容。"
         }
+    }
+
+    static func hint(forStatus code: Int) -> String? {
+        switch code {
+        case 400: return "请求被服务拒绝，请检查模型名称和参数。"
+        case 401, 403: return "API Key 无效或没有权限，请在设置里检查。"
+        case 402: return "账户余额不足，请到模型服务商处充值。"
+        case 404: return "接口地址或模型不存在，请检查 Base URL 和模型名称。"
+        case 408, 504: return "服务响应超时，请稍后再试。"
+        case 429: return "请求太频繁或额度已用完，请稍后再试。"
+        case 500...599: return "模型服务暂时不可用，请稍后再试。"
+        default: return nil
+        }
+    }
+
+    /// A short Chinese message for any error thrown while calling the model.
+    static func userMessage(for error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
+                return "网络未连接，请检查网络后重试。"
+            case .timedOut:
+                return "请求超时，请检查网络，或稍后再试。"
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+                return "连不上接口地址，请检查设置里的 Base URL。"
+            case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+                 .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot:
+                return "与接口建立安全连接失败，请检查 Base URL 是否正确。"
+            default:
+                break
+            }
+        }
+        return error.localizedDescription
+    }
+}
+
+/// One line of a Server-Sent Events stream from an OpenAI-compatible API.
+enum SSEEvent: Equatable {
+    case ignore             // blank line, comment, or an unparsable data line
+    case done               // data: [DONE]
+    case delta(String)      // a piece of content
+    case failure(String)    // an error object inside the stream
+    case nonEvent(String)   // not SSE at all (servers that ignore stream:true)
+}
+
+enum SSEParser {
+    static func parse(_ line: String) -> SSEEvent {
+        let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+        if trimmedLine.isEmpty || trimmedLine.hasPrefix(":") { return .ignore }
+        guard trimmedLine.hasPrefix("data:") else { return .nonEvent(line) }
+        let payload = trimmedLine.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        if payload == "[DONE]" { return .done }
+        guard let data = payload.data(using: .utf8),
+              let chunk = try? JSONDecoder().decode(ChatChunk.self, from: data) else { return .ignore }
+        if let message = chunk.error?.message, !message.isEmpty { return .failure(message) }
+        if let piece = chunk.choices?.first?.delta?.content, !piece.isEmpty { return .delta(piece) }
+        return .ignore
     }
 }
 
@@ -61,7 +120,7 @@ private struct ChatRequest: Encodable {
     }
 }
 
-private struct ChatChunk: Decodable {
+struct ChatChunk: Decodable {
     struct Choice: Decodable {
         struct Content: Decodable {
             let content: String?
@@ -96,7 +155,7 @@ enum LLMClient {
 
     /// Extracts a readable message from an error body (JSON `error.message`
     /// if present, otherwise the first ~400 characters).
-    private static func describeErrorBody(_ body: String) -> String {
+    static func describeErrorBody(_ body: String) -> String {
         if let data = body.data(using: .utf8),
            let chunk = try? JSONDecoder().decode(ChatChunk.self, from: data),
            let message = chunk.error?.message, !message.isEmpty {
@@ -129,24 +188,20 @@ enum LLMClient {
         var receivedAny = false
         var nonEventBody = ""   // for servers that ignore stream:true
 
-        for try await line in bytes.lines {
+        streamLoop: for try await line in bytes.lines {
             try Task.checkCancellation()
-            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            if trimmedLine.isEmpty || trimmedLine.hasPrefix(":") { continue }
-            guard trimmedLine.hasPrefix("data:") else {
-                if nonEventBody.count < 200_000 { nonEventBody += line + "\n" }
+            switch SSEParser.parse(line) {
+            case .ignore:
                 continue
-            }
-            let payload = trimmedLine.dropFirst(5).trimmingCharacters(in: .whitespaces)
-            if payload == "[DONE]" { break }
-            guard let data = payload.data(using: .utf8),
-                  let chunk = try? decoder.decode(ChatChunk.self, from: data) else { continue }
-            if let message = chunk.error?.message, !message.isEmpty {
+            case .done:
+                break streamLoop
+            case .failure(let message):
                 throw LLMError.api(message)
-            }
-            if let piece = chunk.choices?.first?.delta?.content, !piece.isEmpty {
+            case .delta(let piece):
                 receivedAny = true
                 await onDelta(piece)
+            case .nonEvent(let raw):
+                if nonEventBody.count < 200_000 { nonEventBody += raw + "\n" }
             }
         }
         try Task.checkCancellation()

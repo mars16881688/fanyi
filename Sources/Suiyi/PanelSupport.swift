@@ -15,6 +15,17 @@ final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
 
+    /// Set by tests: panels lay out and render but never appear on screen or take focus.
+    nonisolated(unsafe) static var isHeadless = false
+
+    override func orderFrontRegardless() {
+        if !Self.isHeadless { super.orderFrontRegardless() }
+    }
+
+    override func makeKey() {
+        if !Self.isHeadless { super.makeKey() }
+    }
+
     static func make(size: NSSize, allowsKey: Bool) -> FloatingPanel {
         let panel = FloatingPanel(
             contentRect: NSRect(origin: .zero, size: size),

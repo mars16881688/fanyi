@@ -25,11 +25,14 @@ final class ResultPanelController: NSObject {
     private let footer: NSStackView
     private var bodyHeight: NSLayoutConstraint?
 
-    private var originalText: String?
+    private var offersReply = false
+    private var replyExpanded = false
     private var replyInput: ReplyTextView?
     private var replyOutput: NSTextField?
     private var replyButton: NSButton?
     private var replyCopyButton: NSButton?
+    private let closeButton = GlassButton(title: "", symbol: "xmark", style: .plain, size: .small,
+                                          target: nil, action: nil)
     private var replyText = ""
     private var replyStreaming = false
     private var textView: NSTextView?
@@ -47,6 +50,8 @@ final class ResultPanelController: NSObject {
 
     var isVisible: Bool { panel.isVisible }
     var frame: NSRect { panel.frame }
+    /// For snapshot tests.
+    var contentView: NSView? { panel.contentView }
 
     private var bodyAttributes: [NSAttributedString.Key: Any] {
         [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.labelColor,
@@ -97,7 +102,12 @@ final class ResultPanelController: NSObject {
         modeLabel.textColor = .controlAccentColor
         modeIcon.contentTintColor = .controlAccentColor
         modeIcon.setContentHuggingPriority(.required, for: .horizontal)
-        let headerRow = NSStackView(views: [modeIcon, modeLabel, headerLabel, spinner])
+        closeButton.target = self
+        closeButton.action = #selector(closeClicked(_:))
+        closeButton.toolTip = "关闭（Esc）"
+        closeButton.setAccessibilityLabel("关闭")
+        closeButton.setContentHuggingPriority(.required, for: .horizontal)
+        let headerRow = NSStackView(views: [modeIcon, modeLabel, headerLabel, spinner, closeButton])
         headerRow.orientation = .horizontal
         headerRow.distribution = .fill
         headerRow.alignment = .centerY
@@ -213,7 +223,10 @@ final class ResultPanelController: NSObject {
         return label
     }
 
-    private func installReplyBody(original: String) {
+    /// Translation into Chinese: the translation, then an optional reply
+    /// composer. The composer stays collapsed behind one button so a plain
+    /// lookup keeps a compact card.
+    private func installReplyBody() {
         clearBody()
         let scroll = makeScrollView()
         let width = Self.bodyWidth - 4
@@ -222,27 +235,44 @@ final class ResultPanelController: NSObject {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 8
+        stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         doc.addSubview(stack)
 
-        let source = replyBodyLabel(original, width: width)
-        var sourceAttributes = bodyAttributes
-        sourceAttributes[.font] = NSFont.systemFont(ofSize: 12)
-        sourceAttributes[.foregroundColor] = NSColor.secondaryLabelColor
-        source.attributedStringValue = NSAttributedString(string: original, attributes: sourceAttributes)
-        source.maximumNumberOfLines = 3
-        source.lineBreakMode = .byTruncatingTail
-        stack.addArrangedSubview(sectionLabel("对方原文"))
-        stack.addArrangedSubview(source)
-        stack.addArrangedSubview(sectionLabel("中文译文"))
         stack.addArrangedSubview(replyBodyLabel(rawText, width: width))
+        if replyExpanded {
+            addReplyComposer(to: stack, width: width)
+        } else {
+            let start = makeButton("用中文回复", #selector(expandReply(_:)), symbol: "arrowshape.turn.up.left", small: true)
+            start.toolTip = "用中文写回复，随译译成英文"
+            stack.setCustomSpacing(12, after: stack.arrangedSubviews[0])
+            stack.addArrangedSubview(start)
+        }
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: doc.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: doc.bottomAnchor, constant: -2),
+            doc.widthAnchor.constraint(equalToConstant: width),
+        ])
+        scroll.documentView = doc
+        NSLayoutConstraint.activate([
+            doc.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            doc.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+        ])
+        embed(scroll)
+        rewriteDoc = doc
+    }
+
+    private func addReplyComposer(to stack: NSStackView, width: CGFloat) {
+        stack.setCustomSpacing(16, after: stack.arrangedSubviews[0])
         stack.addArrangedSubview(sectionLabel("我的中文回复"))
 
         let inputScroll = makeScrollView()
         inputScroll.translatesAutoresizingMaskIntoConstraints = false
         let input = ReplyTextView(usingTextLayoutManager: false)
-        input.frame = NSRect(x: 0, y: 0, width: width - 16, height: 76)
+        input.frame = NSRect(x: 0, y: 0, width: width - 16, height: 64)
         input.isRichText = false
         input.allowsUndo = true
         input.font = .systemFont(ofSize: 14)
@@ -253,7 +283,7 @@ final class ResultPanelController: NSObject {
         input.isVerticallyResizable = true
         input.isHorizontallyResizable = false
         input.autoresizingMask = [.width]
-        input.minSize = NSSize(width: 0, height: 76)
+        input.minSize = NSSize(width: 0, height: 64)
         input.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         input.textContainer?.widthTracksTextView = true
         input.textContainer?.containerSize = NSSize(width: width - 24, height: CGFloat.greatestFiniteMagnitude)
@@ -264,19 +294,28 @@ final class ResultPanelController: NSObject {
         surface.addSubview(inputScroll)
         NSLayoutConstraint.activate([
             surface.widthAnchor.constraint(equalToConstant: width),
-            surface.heightAnchor.constraint(equalToConstant: 88),
+            surface.heightAnchor.constraint(equalToConstant: 76),
             inputScroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 8),
             inputScroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -8),
             inputScroll.topAnchor.constraint(equalTo: surface.topAnchor, constant: 6),
             inputScroll.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -6),
         ])
         stack.addArrangedSubview(surface)
-        let translate = makeButton("翻译成英文", #selector(replyClicked(_:)))
-        translate.image = SuiyiStyle.symbol("arrow.turn.up.right", description: "翻译成英文")
-        translate.toolTip = "⌘↩ 翻译；Return 换行"
-        stack.addArrangedSubview(translate)
 
-        let copy = makeButton("复制", #selector(copyReply(_:)), small: true)
+        let generate = makeButton("生成英文", #selector(replyClicked(_:)), symbol: "arrow.turn.down.right",
+                                  style: .primary, small: true)
+        generate.toolTip = "⌘↩ 生成英文；Return 换行"
+        let hint = NSTextField(labelWithString: "⌘↩")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .tertiaryLabelColor
+        let actionRow = NSStackView(views: [generate, hint])
+        actionRow.orientation = .horizontal
+        actionRow.alignment = .centerY
+        actionRow.spacing = 8
+        stack.addArrangedSubview(actionRow)
+        stack.setCustomSpacing(16, after: actionRow)
+
+        let copy = makeButton("复制英文", #selector(copyReply(_:)), small: true)
         copy.isEnabled = false
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -285,30 +324,28 @@ final class ResultPanelController: NSObject {
         heading.alignment = .centerY
         heading.widthAnchor.constraint(equalToConstant: width).isActive = true
         stack.addArrangedSubview(heading)
-        let output = replyBodyLabel("输入中文回复后，点击「翻译成英文」。", width: width)
+        let placeholder = "写好中文后按 ⌘↩，英文会出现在这里。"
+        let output = replyBodyLabel(placeholder, width: width)
         var emptyAttributes = bodyAttributes
         emptyAttributes[.foregroundColor] = NSColor.secondaryLabelColor
-        output.attributedStringValue = NSAttributedString(
-            string: "输入中文回复后，点击「翻译成英文」。", attributes: emptyAttributes)
+        output.attributedStringValue = NSAttributedString(string: placeholder, attributes: emptyAttributes)
         stack.addArrangedSubview(output)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: doc.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
-            doc.widthAnchor.constraint(equalToConstant: width),
-        ])
-        scroll.documentView = doc
-        NSLayoutConstraint.activate([
-            doc.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
-            doc.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
-        ])
-        embed(scroll)
-        rewriteDoc = doc
+
         replyInput = input
         replyOutput = output
-        replyButton = translate
+        replyButton = generate
         replyCopyButton = copy
+    }
+
+    @objc func expandReply(_ sender: NSButton?) {
+        replyExpanded = true
+        installReplyBody()
+        rebuildFooter(withActions: true)
+        relayout(keepPosition: true)
+        if let input = replyInput {
+            panel.makeKey()
+            panel.makeFirstResponder(input)
+        }
     }
 
     private func submitReply() {
@@ -318,7 +355,7 @@ final class ResultPanelController: NSObject {
         replyStreaming = true
         replyButton?.isEnabled = false
         replyCopyButton?.isEnabled = false
-        setReplyOutput("正在翻译成英文…", color: .secondaryLabelColor)
+        setReplyOutput("正在生成英文…", color: .secondaryLabelColor)
         onReplyTranslate(input.string.trimmed)
     }
 
@@ -407,18 +444,13 @@ final class ResultPanelController: NSObject {
         return card
     }
 
-    private func makeButton(_ title: String, _ action: Selector, tag: Int = 0, small: Bool = false) -> NSButton {
-        let button = FirstMouseButton(title: title, target: self, action: action)
+    private func makeButton(_ title: String, _ action: Selector, symbol: String? = nil, tag: Int = 0,
+                            style: GlassButton.Style = .secondary, small: Bool = false) -> GlassButton {
+        let defaultSymbol = title.hasPrefix("复制") ? "doc.on.doc" : title == "替换" ? "arrow.turn.down.left" : nil
+        let button = GlassButton(title: title, symbol: symbol ?? defaultSymbol, style: style,
+                                 size: small ? .small : .regular, target: self, action: action)
         button.tag = tag
-        button.bezelStyle = .rounded
-        let symbol = title == "复制" ? "doc.on.doc" : title == "替换" ? "arrow.turn.down.left" : "xmark"
-        button.image = SuiyiStyle.symbol(symbol, description: title)
-        button.imagePosition = .imageLeading
-        button.imageHugsTitle = true
-        if small {
-            button.controlSize = .small
-            button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        }
+        button.setContentHuggingPriority(.required, for: .horizontal)
         return button
     }
 
@@ -447,27 +479,30 @@ final class ResultPanelController: NSObject {
         replyStreaming = false
     }
 
+    /// Copy (and Replace when the source is editable). The last button is the
+    /// primary action. Closing lives in the header and on Esc.
     private func rebuildFooter(withActions: Bool) {
         var views: [NSView] = []
         if withActions {
-            views.append(makeButton("复制", #selector(copyAll(_:))))
-            if editable && !showingError {
-                views.append(makeButton("替换", #selector(replaceAll(_:))))
+            let canReplace = editable && !showingError
+            // While the reply composer is open, 生成英文 is the primary action.
+            views.append(makeButton(offersReply ? "复制译文" : "复制", #selector(copyAll(_:)),
+                                    style: canReplace || replyExpanded ? .secondary : .primary))
+            if canReplace {
+                views.append(makeButton("替换", #selector(replaceAll(_:)), style: .primary))
             }
         }
-        views.append(makeButton("关闭", #selector(closeClicked(_:))))
-        if withActions, let primary = views.dropLast().last as? NSButton {
-            primary.bezelColor = .controlAccentColor
-            primary.contentTintColor = .selectedMenuItemTextColor
-        }
         footer.setViews(views, in: .trailing)
+        footer.isHidden = views.isEmpty
     }
 
     // MARK: - Public API
 
-    func present(kind: ActionKind, header: String, editable: Bool, shortPhrase: Bool, at point: NSPoint, originalText: String? = nil) {
+    func present(kind: ActionKind, header: String, editable: Bool, shortPhrase: Bool, at point: NSPoint,
+                 offersReply: Bool = false) {
         noticeTask?.cancel()
-        self.originalText = originalText
+        self.offersReply = offersReply
+        replyExpanded = false
         self.kind = kind
         self.editable = editable
         self.shortPhrase = shortPhrase
@@ -512,9 +547,8 @@ final class ResultPanelController: NSObject {
             installRewriteBody(parsed)
             rebuildFooter(withActions: false)
         } else {
-            if kind == .translate, !showingError, !rawText.trimmed.isEmpty,
-               let originalText {
-                installReplyBody(original: originalText)
+            if kind == .translate, offersReply, !showingError, !rawText.trimmed.isEmpty {
+                installReplyBody()
             }
             rebuildFooter(withActions: !rawText.trimmed.isEmpty)
         }
@@ -609,12 +643,7 @@ final class ResultPanelController: NSObject {
     /// For a short term the model returns "translation \n note"; copy/replace
     /// use just the first line.
     private func outputText() -> String {
-        let text = rawText.trimmed
-        if kind == .translate, shortPhrase,
-           let first = text.split(separator: "\n", omittingEmptySubsequences: true).first {
-            return String(first).trimmed
-        }
-        return text
+        TranslationOutput.primary(rawText, isTranslation: kind == .translate, shortPhrase: shortPhrase)
     }
 
     private func copyToPasteboard(_ text: String) {
