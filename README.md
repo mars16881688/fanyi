@@ -98,7 +98,7 @@ scripts/create-signing-cert.sh
 ./install.sh
 ```
 
-会把 App 复制到 `~/Applications/Suiyi.app`（目录不存在会自动创建），结束正在运行的 随译 并重新打开。
+每次都会先用当前代码重新构建，再把 App 复制到 `~/Applications/Suiyi.app`（目录不存在会自动创建），结束正在运行的随译并重新打开。
 
 ## 授予辅助功能权限
 
