@@ -39,7 +39,7 @@ cd fanyi  # 仓库目录名暂未改
 ./scripts/package.sh
 ```
 
-产出 `dist/Suiyi-<版本>.zip`（`ditto` 打包，保留签名）并打印 SHA-256。用本机签名时，同事首次打开需在 **系统设置 › 隐私与安全性** 点「仍要打开」。
+产出 `dist/Suiyi-<版本>.zip`（`ditto` 打包，保留签名）并打印 SHA-256。压缩包里是 `Suiyi.app` 和一份中英日安装说明（`Resources/Distribution/`），直接发给同事即可。用本机签名时，同事首次打开需在 **系统设置 › 隐私与安全性** 点「仍要打开」。
 
 有 Apple Developer ID 时可产出公证版本，双击即开、无警告：
 
