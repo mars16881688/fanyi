@@ -59,13 +59,13 @@ final class AnchorController: NSObject {
         bubble.imagePosition = .imageOnly
         bubble.imageScaling = .scaleProportionallyDown
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
-        if let symbol = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "Fanyi") {
+        if let symbol = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "随译") {
             bubble.image = symbol.withSymbolConfiguration(config) ?? symbol
         } else {
             bubble.title = "译"
         }
         bubble.contentTintColor = .controlAccentColor
-        bubble.toolTip = "Fanyi：翻译 / 改写"
+        bubble.toolTip = "随译：翻译 / 改写"
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
         circle.addSubview(bubble)
@@ -81,7 +81,7 @@ final class AnchorController: NSObject {
         for (button, symbol) in [(translateButton, "character.book.closed"), (rewriteButton, "pencil.line")] {
             button.bezelStyle = .inline
             button.font = .systemFont(ofSize: 12, weight: .medium)
-            button.image = FanyiStyle.symbol(symbol, description: button.title)
+            button.image = SuiyiStyle.symbol(symbol, description: button.title)
             button.imagePosition = .imageLeading
             button.imageHugsTitle = true
             button.contentTintColor = .labelColor

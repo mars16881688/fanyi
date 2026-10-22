@@ -123,7 +123,7 @@ final class RoundedSurfaceView: NSView {
 }
 
 @MainActor
-enum FanyiStyle {
+enum SuiyiStyle {
     static func symbol(_ name: String, description: String, size: CGFloat = 12) -> NSImage? {
         let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
         return image?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: .medium)) ?? image

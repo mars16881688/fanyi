@@ -50,7 +50,7 @@ final class ResultPanelController: NSObject {
 
     private var bodyAttributes: [NSAttributedString.Key: Any] {
         [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.labelColor,
-         .paragraphStyle: FanyiStyle.paragraph]
+         .paragraphStyle: SuiyiStyle.paragraph]
     }
 
     override init() {
@@ -149,7 +149,7 @@ final class ResultPanelController: NSObject {
         tv.font = .systemFont(ofSize: 14)
         tv.textColor = .labelColor
         tv.textContainerInset = NSSize(width: 0, height: 4)
-        tv.defaultParagraphStyle = FanyiStyle.paragraph
+        tv.defaultParagraphStyle = SuiyiStyle.paragraph
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = false
         tv.autoresizingMask = [.width]
@@ -272,7 +272,7 @@ final class ResultPanelController: NSObject {
         ])
         stack.addArrangedSubview(surface)
         let translate = makeButton("翻译成英文", #selector(replyClicked(_:)))
-        translate.image = FanyiStyle.symbol("arrow.turn.up.right", description: "翻译成英文")
+        translate.image = SuiyiStyle.symbol("arrow.turn.up.right", description: "翻译成英文")
         translate.toolTip = "⌘↩ 翻译；Return 换行"
         stack.addArrangedSubview(translate)
 
@@ -412,7 +412,7 @@ final class ResultPanelController: NSObject {
         button.tag = tag
         button.bezelStyle = .rounded
         let symbol = title == "复制" ? "doc.on.doc" : title == "替换" ? "arrow.turn.down.left" : "xmark"
-        button.image = FanyiStyle.symbol(symbol, description: title)
+        button.image = SuiyiStyle.symbol(symbol, description: title)
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
         if small {
@@ -478,7 +478,7 @@ final class ResultPanelController: NSObject {
         modeLabel.textColor = .controlAccentColor
         modeIcon.contentTintColor = .controlAccentColor
         modeLabel.stringValue = kind == .translate ? "翻译" : "改写"
-        modeIcon.image = FanyiStyle.symbol(kind == .translate ? "character.book.closed" : "pencil.line",
+        modeIcon.image = SuiyiStyle.symbol(kind == .translate ? "character.book.closed" : "pencil.line",
                                           description: modeLabel.stringValue)
         headerLabel.stringValue = header
         spinner.startAnimation(nil)
@@ -487,7 +487,7 @@ final class ResultPanelController: NSObject {
             string: kind == .translate ? "正在翻译…" : "正在改写…",
             attributes: [.font: NSFont.systemFont(ofSize: 14),
                          .foregroundColor: NSColor.secondaryLabelColor,
-                         .paragraphStyle: FanyiStyle.paragraph]))
+                         .paragraphStyle: SuiyiStyle.paragraph]))
         rebuildFooter(withActions: false)
         reference = point
         topLeft = NSPoint(x: point.x + 4, y: point.y - 12)
@@ -524,7 +524,7 @@ final class ResultPanelController: NSObject {
     func showError(_ message: String) {
         streaming = false
         showingError = true
-        modeIcon.image = FanyiStyle.symbol("exclamationmark.triangle.fill", description: message)
+        modeIcon.image = SuiyiStyle.symbol("exclamationmark.triangle.fill", description: message)
         modeIcon.contentTintColor = .systemRed
         modeLabel.textColor = .systemRed
         spinner.stopAnimation(nil)
@@ -533,7 +533,7 @@ final class ResultPanelController: NSObject {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13),
             .foregroundColor: NSColor.systemRed,
-            .paragraphStyle: FanyiStyle.paragraph,
+            .paragraphStyle: SuiyiStyle.paragraph,
         ]
         let prefix = rawText.isEmpty ? "" : "\n\n"
         textView?.textStorage?.append(NSAttributedString(string: prefix + "⚠︎ " + message, attributes: attributes))
@@ -543,9 +543,9 @@ final class ResultPanelController: NSObject {
 
     /// A short message that disappears by itself.
     func showNotice(_ message: String, at point: NSPoint) {
-        present(kind: .translate, header: "Fanyi", editable: false, shortPhrase: false, at: point)
+        present(kind: .translate, header: "随译", editable: false, shortPhrase: false, at: point)
         showError(message)
-        modeIcon.image = FanyiStyle.symbol("info.circle.fill", description: message)
+        modeIcon.image = SuiyiStyle.symbol("info.circle.fill", description: message)
         modeIcon.contentTintColor = .secondaryLabelColor
         modeLabel.textColor = .secondaryLabelColor
         textView?.textStorage?.setAttributedString(NSAttributedString(string: message, attributes: bodyAttributes))
