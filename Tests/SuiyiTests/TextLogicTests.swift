@@ -141,6 +141,18 @@ struct PromptTests {
         #expect(messages[1].content == "ship it Friday")
     }
 
+    @Test("Reply prompt carries the message being answered, but only the reply is translated")
+    func replyPrompt() {
+        let direction = TranslationDirection(source: .chinese, target: .english)
+        let messages = Prompts.reply(text: "10 点", direction: direction, context: context,
+                                     inReplyTo: "We'll meet in Bangkok on Oct 25. Any preferred time?")
+        #expect(messages.count == 2)
+        #expect(messages[0].content.contains("Any preferred time?"))
+        #expect(messages[0].content.contains("Do not add information"))
+        #expect(messages[0].content.contains("English"))
+        #expect(messages[1].content == "10 点")
+    }
+
     @Test("Rewrite prompt asks for the three tagged blocks")
     func rewritePrompt() {
         let system = Prompts.rewrite(text: "我想问一下进展", context: context)[0].content
