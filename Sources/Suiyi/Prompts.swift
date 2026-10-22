@@ -39,6 +39,24 @@ enum Prompts {
         ]
     }
 
+    /// The user's reply, translated back into the sender's language. The
+    /// message being answered is given so short replies ("10 点") read naturally.
+    static func reply(text: String, direction: TranslationDirection, context: AppContext,
+                      inReplyTo original: String) -> [ChatMessage] {
+        var messages = translate(text: text, direction: direction, context: context, shortPhrase: false)
+        let quoted = String(original.trimmed.prefix(1500))
+        let note = """
+
+        ## Conversation (context only — not part of the text)
+        The user's message is a reply to the message below. Translate the reply so it reads as a natural answer to it in \(direction.target.promptName): use the message only to resolve meaning (times, dates, pronouns, what "yes" or a bare number refers to). Do not add information, greetings or sign-offs the user did not write, and never translate the message below.
+        <<<MESSAGE_BEING_ANSWERED
+        \(quoted)
+        MESSAGE_BEING_ANSWERED>>>
+        """
+        messages[0] = ChatMessage(role: "system", content: messages[0].content + note)
+        return messages
+    }
+
     static func rewrite(text: String, context: AppContext) -> [ChatMessage] {
         var lines: [String] = []
         lines.append("You are the writing assistant of a macOS menu-bar tool. Rewrite the user's message in three ways, keeping the SAME language as the message (never translate it).")

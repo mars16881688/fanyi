@@ -147,6 +147,30 @@ struct LocalizedUITests {
         }
     }
 
+    @Test("Reply mode keeps copy next to the translation; outgoing mode keeps the footer")
+    func copyPlacement() {
+        withLanguage(.zh) {
+            let incoming = ResultPanelController()
+            incoming.present(kind: .translate, header: "EN → 中文  ·  Slack", editable: false, shortPhrase: false,
+                             at: NSPoint(x: 400, y: 700), reply: TranslationDirection(source: .chinese, target: .english))
+            incoming.append("我们周四开会可以吗？")
+            incoming.finish()
+            let incomingButtons = findButtons(in: incoming.contentView)
+            #expect(!incomingButtons.contains { $0.title.hasPrefix("复制") })
+            #expect(incomingButtons.contains { $0.title.isEmpty && $0.toolTip == "复制译文" })
+            incoming.hide()
+
+            let outgoing = ResultPanelController()
+            outgoing.present(kind: .translate, header: "中文 → EN  ·  Mail", editable: true, shortPhrase: false,
+                             at: NSPoint(x: 400, y: 700))
+            outgoing.append("Can we meet on Thursday?")
+            outgoing.finish()
+            let titles = findButtons(in: outgoing.contentView).map(\.title)
+            #expect(titles.contains("复制") && titles.contains("替换"))
+            outgoing.hide()
+        }
+    }
+
     private func findButtons(in view: NSView?) -> [NSButton] {
         guard let view else { return [] }
         if let button = view as? NSButton { return [button] }
