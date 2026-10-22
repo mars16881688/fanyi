@@ -79,6 +79,20 @@ enum Clipboard {
         return text
     }
 
+    /// 0.2.1.k.06: a real ⌘C for the user (right-click on the button). The app's own copy stays on
+    /// the clipboard, with its formatting and full length. False when the clipboard did not change.
+    static func copyForUser() async -> Bool {
+        let pasteboard = NSPasteboard.general
+        let before = pasteboard.changeCount
+        postShortcut(copyKey)
+        let deadline = Date().addingTimeInterval(0.5)
+        while Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            if pasteboard.changeCount != before { return true }
+        }
+        return false
+    }
+
     /// Puts `text` on the pasteboard, sends ⌘V, then restores the clipboard.
     static func paste(_ text: String) async {
         let pasteboard = NSPasteboard.general
