@@ -17,9 +17,18 @@ APP="build/Suiyi.app"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 mkdir -p dist
 ZIP="dist/Suiyi-$VERSION.zip"
-rm -f "$ZIP"
-# ditto keeps code signatures and extended attributes intact.
-ditto -c -k --keepParent "$APP" "$ZIP"
+STAGE="build/Suiyi-$VERSION"
+
+# The zip holds a folder with the app and the trilingual install guide.
+make_zip() {
+    rm -rf "$STAGE" "$ZIP"
+    mkdir -p "$STAGE"
+    ditto "$APP" "$STAGE/Suiyi.app"
+    cp Resources/Distribution/*.txt "$STAGE/"
+    # ditto keeps code signatures and extended attributes intact.
+    ditto -c -k --keepParent "$STAGE" "$ZIP"
+}
+make_zip
 
 if [[ -n "${SUIYI_NOTARY_PROFILE:-}" ]]; then
     if ! codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
@@ -28,12 +37,11 @@ if [[ -n "${SUIYI_NOTARY_PROFILE:-}" ]]; then
     fi
     xcrun notarytool submit "$ZIP" --keychain-profile "$SUIYI_NOTARY_PROFILE" --wait
     xcrun stapler staple "$APP"
-    rm -f "$ZIP"
-    ditto -c -k --keepParent "$APP" "$ZIP"
+    make_zip
     spctl --assess --type execute --verbose "$APP"
     echo "已公证：$ZIP"
 else
     echo "未公证（本机签名）：$ZIP"
-    echo "同事首次打开需在 系统设置 › 隐私与安全性 中点「仍要打开」。"
+    echo "压缩包内附中英日安装说明；同事首次打开需在 系统设置 › 隐私与安全性 中点「仍要打开」。"
 fi
 shasum -a 256 "$ZIP"

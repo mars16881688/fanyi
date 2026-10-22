@@ -1,0 +1,26 @@
+随译 Suiyi — 安装说明 / Install / インストール
+================================================
+
+【中文】
+1. 把「Suiyi.app」拖进「应用程序」文件夹，双击打开。
+2. 系统提示「无法验证开发者」时：打开 系统设置 › 隐私与安全性，滚动到底部，点「仍要打开」，再确认一次。只需做一次。
+3. 按提示授予辅助功能权限：系统设置 › 隐私与安全性 › 辅助功能，打开「随译」。然后退出随译再打开一次。
+4. 点菜单栏的随译图标 › 设置…，填写 API Key（任意 OpenAI 兼容接口，默认 DeepSeek），点「测试连接」，再点「保存」。
+5. 在设置里选「我的语言」。之后在任何 App 里选中文字，点旁边的小按钮即可翻译；⌥⌘T 翻译，⌥⌘R 改写。
+如果第 2 步找不到「仍要打开」，可在「终端」运行：xattr -dr com.apple.quarantine /Applications/Suiyi.app
+
+【English】
+1. Drag "Suiyi.app" into your Applications folder and open it.
+2. If macOS says the developer cannot be verified: open System Settings › Privacy & Security, scroll to the bottom, click "Open Anyway" and confirm. You only need to do this once.
+3. Grant Accessibility access when asked: System Settings › Privacy & Security › Accessibility, turn on Suiyi. Then quit and reopen Suiyi.
+4. Click the Suiyi icon in the menu bar › Settings…, enter an API key (any OpenAI-compatible API; DeepSeek by default), click Test Connection, then Save.
+5. Pick "My language" in Settings. Then select text in any app and click the small button to translate; ⌥⌘T translates, ⌥⌘R rewrites.
+If you can't find "Open Anyway" in step 2, run this in Terminal: xattr -dr com.apple.quarantine /Applications/Suiyi.app
+
+【日本語】
+1. 「Suiyi.app」を「アプリケーション」フォルダにドラッグして開きます。
+2. 「開発元を検証できません」と表示されたら：システム設定 › プライバシーとセキュリティ を開き、一番下の「このまま開く」をクリックして確認します。最初の一回だけです。
+3. 案内に従ってアクセシビリティを許可します：システム設定 › プライバシーとセキュリティ › アクセシビリティ で Suiyi をオンにし、Suiyi をいったん終了してもう一度開きます。
+4. メニューバーの Suiyi アイコン › 設定… で API キーを入力し（OpenAI 互換の API。既定は DeepSeek）、「接続テスト」のあと「保存」をクリックします。
+5. 設定で「自分の言語」を選びます。あとはどのアプリでもテキストを選択し、横の小さなボタンで翻訳できます。⌥⌘T で翻訳、⌥⌘R で書き換え。
+手順 2 で「このまま開く」が見つからない場合は、ターミナルで次を実行してください：xattr -dr com.apple.quarantine /Applications/Suiyi.app
