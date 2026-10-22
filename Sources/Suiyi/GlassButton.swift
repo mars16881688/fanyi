@@ -99,6 +99,22 @@ final class GlassButton: NSButton {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
 
+    // MARK: Secondary click
+
+    /// 0.2.1.k.06: when set, a right-click, a two-finger trackpad click or a Control-click calls this
+    /// instead of the button's action.
+    var onSecondaryClick: (() -> Void)?
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let onSecondaryClick else { return super.rightMouseDown(with: event) }
+        onSecondaryClick()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control), let onSecondaryClick { return onSecondaryClick() }
+        super.mouseDown(with: event)
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true

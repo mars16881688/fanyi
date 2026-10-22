@@ -231,7 +231,33 @@ struct PromptTests {
         #expect(messages[0].content.contains("Any preferred time?"))
         #expect(messages[0].content.contains("Do not add information"))
         #expect(messages[0].content.contains("English"))
+        #expect(messages[0].content.contains("Keep names, product names, terms"))
+        #expect(!messages[0].content.contains("politeness level"))   // only for Japanese replies
+        // 0.2.1.k.08: a reply is written for its app (X vs Telegram vs e-mail), so the environment shapes it.
+        #expect(messages[0].content.contains("Fit the app or site shown in the environment section"))
+        #expect(messages[0].content.contains("Application: Slack"))
+        #expect(messages[0].content.contains("Window title: #release"))
+        #expect(!messages[0].content.contains("tone follows the Style rule above, not the environment"))
         #expect(messages[1].content == "10 点")
+    }
+
+    @Test("Reply context keeps the whole selection, so a question at the end of a long mail is seen (0.2.1.k.07)")
+    func replyLongContext() {
+        let direction = TranslationDirection(source: .chinese, target: .english)
+        let long = String(repeating: "Background paragraph. ", count: 150) + "FINAL QUESTION: can you join on Friday?"
+        #expect(long.count > 1500 && long.count < Prompts.replyContextLimit)
+        let system = Prompts.reply(text: "可以", direction: direction, context: context, style: .colloquial,
+                                   inReplyTo: long)[0].content
+        #expect(system.contains("FINAL QUESTION: can you join on Friday?"))
+    }
+
+    @Test("Japanese replies follow the politeness of the message (0.2.1.k.07)")
+    func replyJapanesePoliteness() {
+        let direction = TranslationDirection(source: .chinese, target: .japanese)
+        let system = Prompts.reply(text: "好的，周五可以", direction: direction, context: context, style: .colloquial,
+                                   inReplyTo: "金曜日のご都合はいかがでしょうか。")[0].content
+        #expect(system.contains("politeness level"))
+        #expect(system.contains("overrides the Style rule"))
     }
 
     @Test("Rewrite prompt asks for the three tagged blocks and ignores the translation style")

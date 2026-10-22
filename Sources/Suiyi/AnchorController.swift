@@ -7,10 +7,12 @@ enum ActionKind {
 
 /// The small round button shown after a mouse selection. One click translates;
 /// rewriting is a tab on the result card. Hovering only keeps it from hiding,
-/// so nothing is sent to the model without an explicit click.
+/// so nothing is sent to the model without an explicit click. A right-click (or
+/// two-finger click) copies the selection instead (0.2.1.k.06); nothing is sent.
 @MainActor
 final class AnchorController: NSObject {
     var onPick: (@MainActor (ActionKind) -> Void)?
+    var onCopy: (@MainActor () -> Void)?
     private(set) var referencePoint = NSPoint.zero
 
     private static let bubbleSize: CGFloat = 30
@@ -51,9 +53,11 @@ final class AnchorController: NSObject {
         bubble.tint = .controlAccentColor
         bubble.iconPointSize = 15
         bubble.setAccessibilityLabel(L("随译：翻译", "Suiyi: Translate", "Suiyi：翻訳", "Suiyi: 번역"))
-        bubble.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）", "번역 (⌥⌘T)")
+        bubble.toolTip = L("翻译（⌥⌘T）· 右键或双指按下：复制", "Translate (⌥⌘T) · Right-click or two-finger click: Copy",
+                           "翻訳（⌥⌘T）· 右クリック／2 本指クリック：コピー", "번역 (⌥⌘T) · 오른쪽 클릭 또는 두 손가락 클릭: 복사")
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
+        bubble.onSecondaryClick = { [weak self] in self?.copyClicked() }
         circle.addSubview(bubble)
 
         root.onEnter = { [weak self] in self?.hideTask?.cancel() }
@@ -65,6 +69,7 @@ final class AnchorController: NSObject {
 
     func show(at point: NSPoint) {
         hideTask?.cancel()
+        bubble.symbolName = "character.bubble"   // a copy checkmark from just before may still be showing
         referencePoint = point
         let size = AnchorController.bubbleSize
         let rect = NSRect(x: point.x + 8, y: point.y - 8 - size, width: size, height: size)
@@ -92,5 +97,18 @@ final class AnchorController: NSObject {
     @objc private func bubbleClicked(_ sender: Any?) {
         hide()
         onPick?(.translate)
+    }
+
+    /// Copies, then shows a checkmark for a moment so the copy is visible before the button goes.
+    private func copyClicked() {
+        hideTask?.cancel()
+        onCopy?()
+        bubble.symbolName = "checkmark"
+        hideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.hide()
+            self.bubble.symbolName = "character.bubble"
+        }
     }
 }

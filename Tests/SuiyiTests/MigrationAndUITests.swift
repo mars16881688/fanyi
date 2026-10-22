@@ -121,3 +121,30 @@ struct AppIconTests {
         }
     }
 }
+
+@Suite("Button secondary click")
+@MainActor
+struct SecondaryClickTests {
+    final class Counter: NSObject {
+        var primary = 0
+        @objc func clicked(_ sender: Any?) { primary += 1 }
+    }
+
+    private func event(_ type: NSEvent.EventType, _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.mouseEvent(with: type, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
+                           context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+    }
+
+    @Test("Right-click and Control-click copy (0.2.1.k.06) without triggering the primary action")
+    func secondaryClick() {
+        let counter = Counter()
+        let button = GlassButton(title: "", symbol: "character.bubble", style: .plain,
+                                 target: counter, action: #selector(Counter.clicked(_:)))
+        var copies = 0
+        button.onSecondaryClick = { copies += 1 }
+        button.rightMouseDown(with: event(.rightMouseDown))
+        button.mouseDown(with: event(.leftMouseDown, .control))
+        #expect(copies == 2)
+        #expect(counter.primary == 0)
+    }
+}
