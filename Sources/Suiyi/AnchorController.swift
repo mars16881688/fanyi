@@ -5,8 +5,9 @@ enum ActionKind {
     case rewrite
 }
 
-/// The small round button shown after a mouse selection. Click it (or hover
-/// for ~350 ms) and it turns into two buttons: 翻译 / 改写.
+/// The small round button shown after a mouse selection. One click translates;
+/// rewriting is a tab on the result card. Hovering only keeps it from hiding,
+/// so nothing is sent to the model without an explicit click.
 @MainActor
 final class AnchorController: NSObject {
     var onPick: (@MainActor (ActionKind) -> Void)?
@@ -14,21 +15,13 @@ final class AnchorController: NSObject {
 
     private static let bubbleSize: CGFloat = 30
     private static let autoHideSeconds: UInt64 = 4
-    private static let hoverDelay: UInt64 = 350_000_000
 
     private let panel: FloatingPanel
     private let root: HoverView
     private let circle: NSView
     private let bubble: GlassButton
-    private let choices: NSVisualEffectView
-    private let translateButton: GlassButton
-    private let rewriteButton: GlassButton
 
-    private var expanded = false
-    private var shown = false
-    private var topLeft = NSPoint.zero
     private var hideTask: Task<Void, Never>?
-    private var hoverTask: Task<Void, Never>?
 
     var isVisible: Bool { panel.isVisible }
     var frame: NSRect { panel.frame }
@@ -36,15 +29,12 @@ final class AnchorController: NSObject {
     var contentView: NSView? { panel.contentView }
 
     override init() {
-        let size: CGFloat = 30
+        let size = AnchorController.bubbleSize
         let square = NSRect(x: 0, y: 0, width: size, height: size)
         panel = FloatingPanel.make(size: square.size, allowsKey: false)
         root = HoverView(frame: square)
         circle = RoundedMaterialView(frame: square)
         bubble = GlassButton(title: "", symbol: "character.bubble", style: .plain, target: nil, action: nil)
-        choices = RoundedMaterialView(frame: .zero)
-        translateButton = GlassButton(title: L("翻译", "Translate", "翻訳"), symbol: "character.book.closed", target: nil, action: nil)
-        rewriteButton = GlassButton(title: L("改写", "Rewrite", "書き換え"), symbol: "pencil.line", target: nil, action: nil)
         super.init()
         configure()
     }
@@ -60,55 +50,34 @@ final class AnchorController: NSObject {
         bubble.frame = NSRect(x: 0, y: 0, width: size, height: size)
         bubble.tint = .controlAccentColor
         bubble.iconPointSize = 15
-        bubble.setAccessibilityLabel(L("随译", "Suiyi", "Suiyi"))
-        bubble.toolTip = L("随译：翻译 / 改写", "Suiyi: Translate / Rewrite", "Suiyi：翻訳 / 書き換え")
+        bubble.setAccessibilityLabel(L("随译：翻译", "Suiyi: Translate", "Suiyi：翻訳"))
+        bubble.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）")
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
         circle.addSubview(bubble)
 
-        (choices as? RoundedMaterialView)?.radius = 20
-        choices.isHidden = true
-        root.addSubview(choices)
-
-        translateButton.target = self
-        translateButton.action = #selector(pickTranslate(_:))
-        rewriteButton.target = self
-        rewriteButton.action = #selector(pickRewrite(_:))
-        translateButton.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）")
-        rewriteButton.toolTip = L("改写（⌥⌘R）", "Rewrite (⌥⌘R)", "書き換え（⌥⌘R）")
-        choices.addSubview(translateButton)
-        choices.addSubview(rewriteButton)
-
-        root.onEnter = { [weak self] in self?.pointerEntered() }
-        root.onExit = { [weak self] in self?.pointerExited() }
+        root.onEnter = { [weak self] in self?.hideTask?.cancel() }
+        root.onExit = { [weak self] in
+            guard let self, self.panel.isVisible else { return }
+            self.scheduleHide()
+        }
     }
 
     func show(at point: NSPoint) {
-        cancelTimers()
+        hideTask?.cancel()
         referencePoint = point
-        expanded = false
-        choices.isHidden = true
-        circle.isHidden = false
-        topLeft = NSPoint(x: point.x + 8, y: point.y - 8)
         let size = AnchorController.bubbleSize
-        applySize(NSSize(width: size, height: size))
+        let rect = NSRect(x: point.x + 8, y: point.y - 8 - size, width: size, height: size)
+        panel.setFrame(ScreenGeometry.fit(rect, reference: point), display: true)
+        panel.invalidateShadow()
         panel.orderFrontRegardless()
-        shown = true
         scheduleHide()
     }
 
     func hide() {
-        cancelTimers()
-        expanded = false
-        shown = false
-        panel.orderOut(nil)
-    }
-
-    private func cancelTimers() {
         hideTask?.cancel()
         hideTask = nil
-        hoverTask?.cancel()
-        hoverTask = nil
+        panel.orderOut(nil)
     }
 
     private func scheduleHide() {
@@ -120,59 +89,8 @@ final class AnchorController: NSObject {
         }
     }
 
-    private func applySize(_ size: NSSize) {
-        let rect = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
-        panel.setFrame(ScreenGeometry.fit(rect, reference: referencePoint), display: true)
-        panel.invalidateShadow()
-    }
-
-    func expand() {
-        guard !expanded, shown else { return }
-        expanded = true
-        hoverTask?.cancel()
-        hideTask?.cancel()
-
-        let pad: CGFloat = 5
-        let height = GlassButton.Size.regular.height
-        let w1 = max(76, translateButton.intrinsicContentSize.width)
-        let w2 = max(76, rewriteButton.intrinsicContentSize.width)
-        let size = NSSize(width: pad * 3 + w1 + w2, height: height + pad * 2)
-        translateButton.frame = NSRect(x: pad, y: pad, width: w1, height: height)
-        rewriteButton.frame = NSRect(x: pad * 2 + w1, y: pad, width: w2, height: height)
-        choices.frame = NSRect(origin: .zero, size: size)
-
-        circle.isHidden = true
-        choices.isHidden = false
-        applySize(size)
-    }
-
-    private func pointerEntered() {
-        hideTask?.cancel()
-        guard !expanded else { return }
-        hoverTask?.cancel()
-        hoverTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: AnchorController.hoverDelay)
-            guard !Task.isCancelled, let self else { return }
-            self.expand()
-        }
-    }
-
-    private func pointerExited() {
-        hoverTask?.cancel()
-        if panel.isVisible { scheduleHide() }
-    }
-
     @objc private func bubbleClicked(_ sender: Any?) {
-        expand()
-    }
-
-    @objc private func pickTranslate(_ sender: Any?) {
         hide()
         onPick?(.translate)
-    }
-
-    @objc private func pickRewrite(_ sender: Any?) {
-        hide()
-        onPick?(.rewrite)
     }
 }

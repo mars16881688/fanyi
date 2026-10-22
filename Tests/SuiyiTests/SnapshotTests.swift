@@ -95,17 +95,62 @@ struct LocalizedUITests {
         }
     }
 
-    @Test("Anchor bubble and expanded choices", arguments: languages)
+    @Test("Anchor bubble", arguments: languages)
     func anchor(language: UILanguage) throws {
         try withLanguage(language) {
             let anchor = AnchorController()
             anchor.show(at: NSPoint(x: 400, y: 400))
             try check(anchor.contentView, "anchor-bubble", language)
-            anchor.expand()
-            #expect((anchor.contentView?.bounds.width ?? 0) > 100)
-            try check(anchor.contentView, "anchor-choices", language)
             anchor.hide()
         }
+    }
+
+    @Test("Clicking the bubble translates straight away")
+    func bubbleTranslates() throws {
+        let anchor = AnchorController()
+        var picked: [ActionKind] = []
+        anchor.onPick = { picked.append($0) }
+        anchor.show(at: NSPoint(x: 400, y: 400))
+        let button = try #require(findButtons(in: anchor.contentView).first)
+        button.performClick(nil)
+        #expect(picked == [.translate])
+    }
+
+    @Test("Tabs switch between translate and rewrite")
+    func tabs() throws {
+        withLanguage(.zh) {
+            let card = ResultPanelController()
+            var switched: [ActionKind] = []
+            card.onSwitchKind = { switched.append($0) }
+            card.present(kind: .translate, header: "EN → 中文  ·  Slack", editable: false,
+                         shortPhrase: false, at: NSPoint(x: 400, y: 700))
+            let buttons = findButtons(in: card.contentView)
+            let translate = buttons.first { $0.title == "翻译" }
+            let rewrite = buttons.first { $0.title == "改写" }
+            #expect(translate != nil && rewrite != nil)
+            translate?.performClick(nil)   // already selected: no request
+            rewrite?.performClick(nil)
+            #expect(switched == [.rewrite])
+            #expect((rewrite as? GlassButton)?.style == .plain)   // selection follows the re-present
+
+            // AppDelegate re-presents in place for the other tab.
+            let before = card.frame
+            card.present(kind: .rewrite, header: "保持原语言  ·  Slack", editable: false, shortPhrase: false,
+                         at: NSPoint(x: before.minX, y: before.maxY), keepPosition: true)
+            #expect((rewrite as? GlassButton)?.style == .secondary)
+            #expect((translate as? GlassButton)?.style == .plain)
+            #expect(card.frame.minX == before.minX && card.frame.maxY == before.maxY)
+
+            card.showNotice("x", at: NSPoint(x: 400, y: 700))   // notices have no tabs
+            #expect(rewrite?.superview?.isHidden == true)
+            card.hide()
+        }
+    }
+
+    private func findButtons(in view: NSView?) -> [NSButton] {
+        guard let view else { return [] }
+        if let button = view as? NSButton { return [button] }
+        return view.subviews.flatMap { findButtons(in: $0) }
     }
 
     @Test("Translation card with a reply back to Japanese", arguments: languages)

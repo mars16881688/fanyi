@@ -8,6 +8,8 @@ final class ResultPanelController: NSObject {
     var onReplace: (@MainActor (String) -> Void)?
     var onReplyTranslate: (@MainActor (String) -> Void)?
     var onClose: (@MainActor () -> Void)?
+    /// The 翻译 / 改写 tabs ask for the same selection in the other mode.
+    var onSwitchKind: (@MainActor (ActionKind) -> Void)?
 
     private static let panelWidth: CGFloat = 420
     private static let maxPanelHeight: CGFloat = 360
@@ -35,6 +37,17 @@ final class ResultPanelController: NSObject {
     private var replyCopyButton: NSButton?
     private let closeButton = GlassButton(title: "", symbol: "xmark", style: .plain, size: .small,
                                           target: nil, action: nil)
+    private let translateTab = GlassButton(title: L("翻译", "Translate", "翻訳"), symbol: "character.book.closed",
+                                           style: .plain, size: .small, target: nil, action: nil)
+    private let rewriteTab = GlassButton(title: L("改写", "Rewrite", "書き換え"), symbol: "pencil.line",
+                                         style: .plain, size: .small, target: nil, action: nil)
+    private lazy var tabs: NSStackView = {
+        let stack = NSStackView(views: [translateTab, rewriteTab])
+        stack.orientation = .horizontal
+        stack.spacing = 2
+        stack.setContentHuggingPriority(.required, for: .horizontal)
+        return stack
+    }()
     private var replyText = ""
     private var replyStreaming = false
     private var textView: NSTextView?
@@ -109,7 +122,13 @@ final class ResultPanelController: NSObject {
         closeButton.toolTip = L("关闭（Esc）", "Close (Esc)", "閉じる（Esc）")
         closeButton.setAccessibilityLabel(L("关闭", "Close", "閉じる"))
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
-        let headerRow = NSStackView(views: [modeIcon, modeLabel, headerLabel, spinner, closeButton])
+        translateTab.target = self
+        translateTab.action = #selector(tabClicked(_:))
+        translateTab.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）")
+        rewriteTab.target = self
+        rewriteTab.action = #selector(tabClicked(_:))
+        rewriteTab.toolTip = L("改写（⌥⌘R）", "Rewrite (⌥⌘R)", "書き換え（⌥⌘R）")
+        let headerRow = NSStackView(views: [modeIcon, modeLabel, tabs, headerLabel, spinner, closeButton])
         headerRow.orientation = .horizontal
         headerRow.distribution = .fill
         headerRow.alignment = .centerY
@@ -520,8 +539,10 @@ final class ResultPanelController: NSObject {
 
     // MARK: - Public API
 
+    /// `keepPosition`: `point` is the card's current top-left (switching tabs).
+    /// `showsTabs`: false for one-off notices.
     func present(kind: ActionKind, header: String, editable: Bool, shortPhrase: Bool, at point: NSPoint,
-                 reply: TranslationDirection? = nil) {
+                 reply: TranslationDirection? = nil, keepPosition: Bool = false, showsTabs: Bool = true) {
         noticeTask?.cancel()
         self.reply = reply
         replyExpanded = false
@@ -538,6 +559,10 @@ final class ResultPanelController: NSObject {
         modeIcon.image = SuiyiStyle.symbol(kind == .translate ? "character.book.closed" : "pencil.line",
                                           description: modeLabel.stringValue)
         headerLabel.stringValue = header
+        tabs.isHidden = !showsTabs
+        modeIcon.isHidden = showsTabs
+        modeLabel.isHidden = showsTabs
+        selectTab(kind)
         spinner.startAnimation(nil)
         installTextBody()
         textView?.textStorage?.setAttributedString(NSAttributedString(
@@ -547,7 +572,7 @@ final class ResultPanelController: NSObject {
                          .paragraphStyle: SuiyiStyle.paragraph]))
         rebuildFooter(withActions: false)
         reference = point
-        topLeft = NSPoint(x: point.x + 4, y: point.y - 12)
+        topLeft = keepPosition ? point : NSPoint(x: point.x + 4, y: point.y - 12)
         relayout(keepPosition: false)
         panel.orderFrontRegardless()
     }
@@ -599,7 +624,8 @@ final class ResultPanelController: NSObject {
 
     /// A short message that disappears by itself.
     func showNotice(_ message: String, at point: NSPoint) {
-        present(kind: .translate, header: L("随译", "Suiyi", "Suiyi"), editable: false, shortPhrase: false, at: point)
+        present(kind: .translate, header: L("随译", "Suiyi", "Suiyi"), editable: false, shortPhrase: false, at: point,
+                showsTabs: false)
         showError(message)
         modeIcon.image = SuiyiStyle.symbol("info.circle.fill", description: message)
         modeIcon.contentTintColor = .secondaryLabelColor
@@ -703,6 +729,20 @@ final class ResultPanelController: NSObject {
     @objc private func replaceVariant(_ sender: NSButton) {
         guard variants.indices.contains(sender.tag) else { return }
         onReplace?(variants[sender.tag].text)
+    }
+
+    private func selectTab(_ kind: ActionKind) {
+        for (tab, tabKind) in [(translateTab, ActionKind.translate), (rewriteTab, .rewrite)] {
+            let selected = tabKind == kind
+            tab.style = selected ? .secondary : .plain
+            tab.setAccessibilitySelected(selected)
+        }
+    }
+
+    @objc func tabClicked(_ sender: NSButton) {
+        let picked: ActionKind = sender === rewriteTab ? .rewrite : .translate
+        guard picked != kind else { return }
+        onSwitchKind?(picked)
     }
 
     @objc private func closeClicked(_ sender: NSButton) {
