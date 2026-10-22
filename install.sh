@@ -1,11 +1,10 @@
 #!/bin/bash
-# Copy build/Suiyi.app to ~/Applications, restart it.
+# Build from the current checkout, copy build/Suiyi.app to ~/Applications, restart it.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-if [ ! -d build/Suiyi.app ]; then
-    ./build.sh
-fi
+# Always rebuild: an existing build/Suiyi.app may be from another branch or version.
+./build.sh
 
 DEST="$HOME/Applications"
 mkdir -p "$DEST"
