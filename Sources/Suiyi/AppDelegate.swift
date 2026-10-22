@@ -479,9 +479,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
         guard let capture = lastCapture, let translation = completedTranslation else { return }
         streamedReply = ""
-        let messages = StyleContext.replyMessages(Prompts.translate(
-            text: text, direction: direction,
-            context: context, shortPhrase: false))
+        let messages = StyleContext.replyMessages(Prompts.reply(
+            text: text, direction: direction, context: context, inReplyTo: capture.selection.text))
         replyTask = Task { @MainActor in
             do {
                 try await LLMClient.streamChat(config: config, messages: messages, temperature: 0.3) { [weak self] delta in

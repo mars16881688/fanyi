@@ -260,7 +260,7 @@ final class ResultPanelController: NSObject {
         stack.translatesAutoresizingMaskIntoConstraints = false
         doc.addSubview(stack)
 
-        stack.addArrangedSubview(replyBodyLabel(rawText, width: width))
+        stack.addArrangedSubview(translationRow(width: width))
         if replyExpanded {
             addReplyComposer(to: stack, width: width)
         } else {
@@ -288,6 +288,36 @@ final class ResultPanelController: NSObject {
         ])
         embed(scroll)
         rewriteDoc = doc
+    }
+
+    /// The translation with its own small Copy (and Replace) icons beside it;
+    /// in reply mode the card has no footer, so these are the only copy actions.
+    private func translationRow(width: CGFloat) -> NSView {
+        var icons: [GlassButton] = [iconButton("doc.on.doc", L("复制译文", "Copy translation", "訳文をコピー"),
+                                               #selector(copyAll(_:)))]
+        if editable {
+            icons.append(iconButton("arrow.turn.down.left", L("用译文替换原文", "Replace the original", "原文を訳文で置き換え"),
+                                    #selector(replaceAll(_:))))
+        }
+        let iconStack = NSStackView(views: icons)
+        iconStack.orientation = .horizontal
+        iconStack.spacing = 2
+        iconStack.alignment = .top
+        let iconsWidth = CGFloat(icons.count) * GlassButton.Size.small.height + CGFloat(icons.count - 1) * 2
+        let text = replyBodyLabel(rawText, width: width - iconsWidth - 8)
+        let row = NSStackView(views: [text, iconStack])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 8
+        return row
+    }
+
+    private func iconButton(_ symbol: String, _ label: String, _ action: Selector) -> GlassButton {
+        let button = GlassButton(title: "", symbol: symbol, style: .plain, size: .small, target: self, action: action)
+        button.toolTip = label
+        button.setAccessibilityLabel(label)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
     }
 
     private func addReplyComposer(to stack: NSStackView, width: CGFloat) {
@@ -391,6 +421,7 @@ final class ResultPanelController: NSObject {
         replyStreaming = true
         replyButton?.isEnabled = false
         replyCopyButton?.isEnabled = false
+        (replyCopyButton as? GlassButton)?.style = .secondary
         let target = replyNames.target
         setReplyOutput(L("正在生成\(target)…", "Translating to \(target)…", "\(target)に翻訳中…"),
                        color: .secondaryLabelColor)
@@ -415,6 +446,8 @@ final class ResultPanelController: NSObject {
         replyStreaming = false
         replyButton?.isEnabled = true
         replyCopyButton?.isEnabled = !replyText.trimmed.isEmpty
+        // The finished reply is what gets sent, so copying it becomes the primary action.
+        (replyCopyButton as? GlassButton)?.style = replyText.trimmed.isEmpty ? .secondary : .primary
         if replyText.trimmed.isEmpty {
             setReplyOutput(LLMError.emptyResponse.errorDescription ?? "", color: .secondaryLabelColor)
         }
@@ -520,14 +553,14 @@ final class ResultPanelController: NSObject {
 
     /// Copy (and Replace when the source is editable). The last button is the
     /// primary action. Closing lives in the header and on Esc.
+    /// With a reply on offer the translation carries its own copy icon, so the
+    /// footer stays empty and replying is the next step.
     private func rebuildFooter(withActions: Bool) {
         var views: [NSView] = []
-        if withActions {
+        if withActions && !(offersReply && !showingError) {
             let canReplace = editable && !showingError
-            // While the reply composer is open, 生成英文 is the primary action.
-            views.append(makeButton(offersReply ? L("复制译文", "Copy translation", "訳文をコピー") : L("复制", "Copy", "コピー"),
-                                    #selector(copyAll(_:)), symbol: "doc.on.doc",
-                                    style: canReplace || replyExpanded ? .secondary : .primary))
+            views.append(makeButton(L("复制", "Copy", "コピー"), #selector(copyAll(_:)), symbol: "doc.on.doc",
+                                    style: canReplace ? .secondary : .primary))
             if canReplace {
                 views.append(makeButton(L("替换", "Replace", "置き換え"), #selector(replaceAll(_:)),
                                         symbol: "arrow.turn.down.left", style: .primary))
@@ -701,6 +734,17 @@ final class ResultPanelController: NSObject {
     }
 
     private func flashCopied(_ button: NSButton) {
+        // Icon-only buttons flash a checkmark instead of a label.
+        if let glass = button as? GlassButton, glass.title.isEmpty {
+            guard glass.symbolName != "checkmark" else { return }
+            let original = glass.symbolName
+            glass.symbolName = "checkmark"
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                glass.symbolName = original
+            }
+            return
+        }
         let done = L("已复制", "Copied", "コピーしました")
         guard button.title != done else { return }
         let original = button.title
