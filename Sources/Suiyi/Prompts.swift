@@ -102,11 +102,19 @@ struct RewriteVariant {
 /// Parses the `[简洁] … / [正式] … / [口语] …` reply. Tolerates markdown
 /// bullets/bold, full-width brackets and multi-line blocks.
 enum RewriteParser {
-    private static let specs: [(tags: [String], title: String)] = [
-        (["[简洁]", "【简洁】", "[concise]"], "更简洁"),
-        (["[正式]", "【正式】", "[formal]"], "更正式"),
-        (["[口语]", "【口语】", "[casual]"], "更口语"),
+    private static let specs: [[String]] = [
+        ["[简洁]", "【简洁】", "[concise]"],
+        ["[正式]", "【正式】", "[formal]"],
+        ["[口语]", "【口语】", "[casual]"],
     ]
+
+    static func title(at index: Int) -> String {
+        switch index {
+        case 0: return L("更简洁", "Concise", "簡潔")
+        case 1: return L("更正式", "Formal", "丁寧")
+        default: return L("更口语", "Casual", "カジュアル")
+        }
+    }
 
     static func parse(_ raw: String) -> [RewriteVariant]? {
         var buckets: [Int: [String]] = [:]
@@ -123,7 +131,7 @@ enum RewriteParser {
             var matchedIndex: Int?
             var remainder = ""
             for (index, spec) in specs.enumerated() {
-                if let tag = spec.tags.first(where: { lowered.hasPrefix($0) }) {
+                if let tag = spec.first(where: { lowered.hasPrefix($0) }) {
                     matchedIndex = index
                     remainder = String(probe.dropFirst(tag.count)).trimmingCharacters(in: stripSet)
                     break
@@ -142,7 +150,7 @@ enum RewriteParser {
             guard let lines = buckets[index] else { continue }
             let text = lines.joined(separator: "\n").trimmed
             if !text.isEmpty {
-                result.append(RewriteVariant(title: specs[index].title, text: text))
+                result.append(RewriteVariant(title: title(at: index), text: text))
             }
         }
         return result.isEmpty ? nil : result

@@ -31,13 +31,13 @@ enum AgentIntegration {
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
         guard resolved.path.hasPrefix(home.path + "/") else {
             throw NSError(domain: "Suiyi.AgentIntegration", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。"])
+                          userInfo: [NSLocalizedDescriptionKey: L("接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。", "The file must be inside your home folder. Check CODEX_HOME and symlinks.", "ファイルはホームフォルダ内にある必要があります。CODEX_HOME とシンボリックリンクを確認してください。")])
         }
         var directory = resolved.deletingLastPathComponent()
         while directory.path != "/" {
             if fm.fileExists(atPath: directory.appendingPathComponent(".git").path) {
                 throw NSError(domain: "Suiyi.AgentIntegration", code: 2,
-                              userInfo: [NSLocalizedDescriptionKey: "接入文件不能位于 Git 仓库内。请使用个人配置目录。"])
+                              userInfo: [NSLocalizedDescriptionKey: L("接入文件不能位于 Git 仓库内。请使用个人配置目录。", "The file must not be inside a Git repository. Use your personal config folder.", "ファイルは Git リポジトリ内に置けません。個人の設定フォルダを使ってください。")])
             }
             directory.deleteLastPathComponent()
         }
