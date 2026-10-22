@@ -166,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(makeItem(L("设置…", "Settings…", "設定…"), #selector(openSettings(_:)), key: ","))
         menu.addItem(makeItem(L("关于随译", "About Suiyi", "Suiyi について"), #selector(showAbout(_:))))
+        menu.addItem(makeItem(L("检查更新…", "Check for Updates…", "アップデートを確認…"), #selector(checkForUpdates(_:))))
         menu.addItem(.separator())
         let quit = NSMenuItem(title: quitTitle, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
@@ -198,6 +199,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openSettings(_ sender: Any?) {
         settingsWindow.show()
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        UpdateChecker.checkInteractively()
     }
 
     @objc private func showAbout(_ sender: Any?) {
