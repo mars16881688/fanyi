@@ -68,12 +68,7 @@ final class ResultPanelController: NSObject {
     // MARK: - Construction
 
     private func buildUI() {
-        background.material = .popover
-        background.blendingMode = .behindWindow
-        background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = 14
-        background.layer?.masksToBounds = true
+        (background as? RoundedMaterialView)?.radius = 20
         background.autoresizingMask = [.width, .height]
         panel.contentView = background
         panel.isMovableByWindowBackground = true
@@ -601,6 +596,7 @@ final class ResultPanelController: NSObject {
         }
         let rect = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
         panel.setFrame(ScreenGeometry.fit(rect, reference: reference), display: true)
+        panel.invalidateShadow()
 
         if streaming, wanted > maxBody, let tv = textView {
             let end = (tv.string as NSString).length
