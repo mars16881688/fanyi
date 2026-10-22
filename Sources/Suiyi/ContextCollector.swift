@@ -21,12 +21,14 @@ enum SceneKind: String {
     private static let codeApps: Set<String> = [
         "com.apple.terminal", "com.googlecode.iterm2", "dev.warp.warp-stable",
         "com.microsoft.vscode", "com.todesktop.230313mzl4w4u92", "com.apple.dt.xcode",
+        "dev.zed.zed", "com.mitchellh.ghostty",
     ]
     private static let chatApps: Set<String> = [
         "com.tinyspeck.slackmacgap", "com.tencent.xinwechat",
         "com.bytedance.macos.feishu", "com.electron.lark",
         "ru.keepcoder.telegram", "org.telegram.desktop",
         "net.whatsapp.whatsapp", "desktop.whatsapp", "com.hnc.discord",
+        "com.alibaba.dingtalkmac", "com.tencent.weworkmac", "com.microsoft.teams2", "com.apple.mobilesms",
     ]
     private static let emailApps: Set<String> = [
         "com.apple.mail", "com.microsoft.outlook",
