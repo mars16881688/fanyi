@@ -9,6 +9,9 @@ final class SettingsModel: ObservableObject {
     @Published var model = ""
     @Published var myLanguage: Language = .chinese
     @Published var outgoingLanguage: Language = .english
+    @Published var translationStyle: TranslationStyle = .colloquial
+    @Published var allowInCodeApps = false
+    @Published var mouseClipboardFallback = false
     @Published var saved = false
     @Published var showAnchor = true
     @Published var launchAtLogin = false
@@ -34,6 +37,9 @@ final class SettingsModel: ObservableObject {
         model = AppSettings.model
         myLanguage = AppSettings.myLanguage
         outgoingLanguage = AppSettings.outgoingLanguage
+        translationStyle = AppSettings.translationStyle
+        allowInCodeApps = AppSettings.allowInCodeApps
+        mouseClipboardFallback = AppSettings.mouseClipboardFallback
         showAnchor = AppSettings.showAnchor
         excluded = AppSettings.excludedRaw
         launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -78,6 +84,9 @@ final class SettingsModel: ObservableObject {
         AppSettings.model = model
         AppSettings.myLanguage = myLanguage
         AppSettings.outgoingLanguage = outgoingLanguage
+        AppSettings.translationStyle = translationStyle
+        AppSettings.allowInCodeApps = allowInCodeApps
+        AppSettings.mouseClipboardFallback = mouseClipboardFallback
         AppSettings.showAnchor = showAnchor
         AppSettings.historyEnabled = historyEnabled
         AppSettings.useMyStyle = useMyStyle
@@ -234,11 +243,39 @@ struct SettingsView: View {
                            "外国語は自分の言語に翻訳します。自分の言語のテキストは、よく使う相手の言語に翻訳します。返信は相手の言語で返します。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Picker(L("翻译风格", "Translation style", "翻訳スタイル"), selection: $model.translationStyle) {
+                        ForEach(TranslationStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                    Text(L("翻译和回复译文都按此倾向措辞；改写不受影响。发给模型的是选中的文字、应用名称、窗口标题、应用类型（聊天、邮件、代码等）和选区附近的文字（像密码或密钥时不发送）；回复时加上你写的回复，开启「我的风格」时另附风格资料。",
+                           "Translations and translated replies lean this way; Rewrite is unaffected. The model receives the selected text, the app name, the window title, the app type (chat, e-mail, code…) and the text around the selection (skipped if it looks like a password or key), plus your reply when replying and your style notes if My style is on.",
+                           "翻訳と返信の訳文はこの傾向で表現します。書き換えには影響しません。モデルに送るのは選択したテキスト、アプリ名、ウィンドウタイトル、アプリの種類（チャット、メール、コードなど）と選択部分の前後の文章（パスワードやキーのように見える場合は送りません）です。返信時は自分の返信、「自分のスタイル」がオンの場合はスタイル情報も送ります。"))
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .onChange(of: model.myLanguage) { mine in
                     if model.outgoingLanguage == mine {
                         model.outgoingLanguage = mine == .english ? .chinese : .english
                     }
+                }
+                Section(L("安全", "Security", "セキュリティ")) {
+                    Text(L("始终开启：不读取钥匙串访问、密码、1Password、Bitwarden、KeePassXC 等密码类应用；窗口标题含「密码」「password」「密钥」「token」等字样时不读取（浏览器网页只看密码管理器的名称，文章照常可读，正文仍逐段检查）；选中内容像密码、密钥、卡号、证件号或助记词时不弹按钮，用快捷键需 10 秒内再触发一次才发送，且不记入历史。",
+                           "Always on: password apps (Keychain Access, Passwords, 1Password, Bitwarden, KeePassXC…) are never read; windows titled with words like password, key or token are not read (on web pages only password-manager titles count, so articles stay readable; the text is still checked); selections that look like passwords, keys, card or ID numbers or recovery phrases get no button, and a shortcut must be repeated within 10 seconds to send them, without saving to history.",
+                           "常に有効：パスワード管理アプリ（キーチェーンアクセス、パスワード、1Password、Bitwarden、KeePassXC など）は読み取りません。タイトルに「パスワード」「password」「token」などを含むウィンドウは読み取りません（Web ページではパスワード管理アプリ名のみが対象で、記事は読めます。本文は引き続き確認します）。パスワード、キー、カード番号、ID 番号、リカバリーフレーズのような選択にはボタンを出さず、ショートカットは 10 秒以内にもう一度実行した場合のみ送信し、履歴には残しません。"))
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Toggle(L("在终端和代码编辑器中启用", "Work in terminals and code editors", "ターミナルとコードエディタでも使う"), isOn: $model.allowInCodeApps)
+                    Text(L("默认关闭：终端和编辑器里常有密钥和令牌。", "Off by default: terminals and editors often show keys and tokens.",
+                           "既定ではオフ：ターミナルやエディタにはキーやトークンがよく表示されます。"))
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Toggle(L("鼠标划词读不到文字时，模拟 ⌘C 读取", "Use ⌘C when a mouse selection can't be read directly", "マウス選択を直接読めないときは ⌘C で読み取る"), isOn: $model.mouseClipboardFallback)
+                    Text(L("默认开启：微信、Telegram 等无法直接读取选中文字的应用靠它弹出按钮。上面的应用、网页和窗口检查通过后才会模拟 ⌘C，读到后再检查内容；选中内容会短暂经过剪贴板，剪贴板管理器可能记下它。要求最严时可关闭，关闭后这些应用请用 ⌥⌘T。",
+                           "On by default: WeChat, Telegram and other apps whose selection can't be read directly need it for the button. ⌘C is used only after the app, page and window checks pass, and the content is checked afterwards; the selection briefly passes through the clipboard, where a clipboard manager may record it. Turn it off for the strictest setting and use ⌥⌘T in those apps.",
+                           "既定でオン：WeChat や Telegram など、選択を直接読めないアプリでボタンを出すために使います。アプリ・ページ・ウィンドウの確認を通過した後にだけ ⌘C を使い、読み取った内容も確認します。選択内容は一時的にクリップボードを通るため、クリップボード管理アプリに記録される場合があります。最も厳しくするならオフにし、これらのアプリでは ⌥⌘T を使ってください。"))
+                        .font(.caption).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Section(L("历史与画像", "History & profile", "履歴とプロファイル")) {
                     Toggle(L("记录历史", "Keep history", "履歴を記録"), isOn: Binding(
@@ -270,7 +307,7 @@ struct SettingsView: View {
                 }
                 Section(L("我的风格", "My style", "自分のスタイル")) {
                     Toggle(L("回复时参考我的风格", "Use my style in replies", "返信で自分のスタイルを参考にする"), isOn: $model.useMyStyle)
-                    Text(verbatim: L("默认关闭。只读取当前用户自己的 ~/.suiyi/profile.md、~/.codex/AGENTS.md（设置了 $CODEX_HOME 时使用该目录）和 ~/.claude/CLAUDE.md；风格背景会随回复发送到你配置的模型接口。", "Off by default. Reads only your own ~/.suiyi/profile.md, ~/.codex/AGENTS.md (or $CODEX_HOME) and ~/.claude/CLAUDE.md; the style notes are sent with replies to your model API.", "既定ではオフ。自分の ~/.suiyi/profile.md、~/.codex/AGENTS.md（$CODEX_HOME 設定時はそのフォルダ）、~/.claude/CLAUDE.md のみを読み取り、スタイル情報は返信と一緒に設定したモデル API に送信されます。"))
+                    Text(verbatim: L("默认关闭。只读取当前用户自己的 ~/.suiyi/profile.md、~/.codex/AGENTS.md（设置了 $CODEX_HOME 时使用该目录）和 ~/.claude/CLAUDE.md，看起来像密码或密钥的行会被去掉；风格背景会随回复发送到你配置的模型接口。", "Off by default. Reads only your own ~/.suiyi/profile.md, ~/.codex/AGENTS.md (or $CODEX_HOME) and ~/.claude/CLAUDE.md, dropping lines that look like passwords or keys; the style notes are sent with replies to your model API.", "既定ではオフ。自分の ~/.suiyi/profile.md、~/.codex/AGENTS.md（$CODEX_HOME 設定時はそのフォルダ）、~/.claude/CLAUDE.md のみを読み取り、パスワードやキーのような行は除外します。スタイル情報は返信と一緒に設定したモデル API に送信されます。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(model.styleSources).font(.caption).foregroundColor(.secondary)
@@ -281,7 +318,7 @@ struct SettingsView: View {
                     }
                     Text(model.integrationStatus).font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(verbatim: L("仅在 ~/.codex/AGENTS.md 和 ~/.claude/CLAUDE.md 中添加带标记的画像引用，保留其他内容。", "Adds a marked profile reference to ~/.codex/AGENTS.md and ~/.claude/CLAUDE.md; everything else is kept.", "~/.codex/AGENTS.md と ~/.claude/CLAUDE.md にマーク付きのプロファイル参照を追加します。ほかの内容はそのままです。"))
+                    Text(verbatim: L("此版本停用「接入 Codex / Claude Code」：画像由模型根据他人文字生成，不应成为 Agent 的指令。如以前接入过，可点「移除接入」清掉标记块。", "Connecting Codex / Claude Code is disabled in this build: the profile is model-written from other people's text and should not become agent instructions. If you connected before, Disconnect removes the marked block.", "このビルドでは「Codex / Claude Code に接続」を無効にしています。プロファイルは他人のテキストからモデルが生成したもので、エージェントへの指示にすべきではありません。以前に接続した場合は「接続を解除」でマーク付きブロックを削除できます。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if !model.localStatus.isEmpty {
