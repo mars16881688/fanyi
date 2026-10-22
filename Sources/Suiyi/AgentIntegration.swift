@@ -31,13 +31,13 @@ enum AgentIntegration {
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
         guard resolved.path.hasPrefix(home.path + "/") else {
             throw NSError(domain: "Suiyi.AgentIntegration", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: L("接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。", "The file must be inside your home folder. Check CODEX_HOME and symlinks.", "ファイルはホームフォルダ内にある必要があります。CODEX_HOME とシンボリックリンクを確認してください。")])
+                          userInfo: [NSLocalizedDescriptionKey: L("接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。", "The file must be inside your home folder. Check CODEX_HOME and symlinks.", "ファイルはホームフォルダ内にある必要があります。CODEX_HOME とシンボリックリンクを確認してください。", "파일은 홈 폴더 안에 있어야 합니다. CODEX_HOME과 심볼릭 링크를 확인하세요.")])
         }
         var directory = resolved.deletingLastPathComponent()
         while directory.path != "/" {
             if fm.fileExists(atPath: directory.appendingPathComponent(".git").path) {
                 throw NSError(domain: "Suiyi.AgentIntegration", code: 2,
-                              userInfo: [NSLocalizedDescriptionKey: L("接入文件不能位于 Git 仓库内。请使用个人配置目录。", "The file must not be inside a Git repository. Use your personal config folder.", "ファイルは Git リポジトリ内に置けません。個人の設定フォルダを使ってください。")])
+                              userInfo: [NSLocalizedDescriptionKey: L("接入文件不能位于 Git 仓库内。请使用个人配置目录。", "The file must not be inside a Git repository. Use your personal config folder.", "ファイルは Git リポジトリ内に置けません。個人の設定フォルダを使ってください。", "파일은 Git 저장소 안에 둘 수 없습니다. 개인 설정 폴더를 사용하세요.")])
             }
             directory.deleteLastPathComponent()
         }

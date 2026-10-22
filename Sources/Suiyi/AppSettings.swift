@@ -123,6 +123,7 @@ enum AppSettings {
         case .zh: .chinese
         case .ja: .japanese
         case .en: .english
+        case .ko: .korean
         }
         let mine = selectable(storedMine) ?? legacy?.0 ?? systemMine
         let fallbackOutgoing: Language = legacy.map { $0.0 == mine ? $0.1 : .english } ?? .english
@@ -177,8 +178,8 @@ enum TranslationStyle: String, CaseIterable, Identifiable, Sendable {
 
     var label: String {
         switch self {
-        case .colloquial: return L("口语倾向", "Conversational", "口語寄り")
-        case .business: return L("商务倾向", "Business", "ビジネス寄り")
+        case .colloquial: return L("口语倾向", "Conversational", "口語寄り", "대화체")
+        case .business: return L("商务倾向", "Business", "ビジネス寄り", "비즈니스")
         }
     }
 

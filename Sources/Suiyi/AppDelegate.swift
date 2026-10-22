@@ -116,31 +116,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: appName)
-        appMenu.addItem(withTitle: L("关闭窗口", "Close Window", "ウインドウを閉じる"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        appMenu.addItem(withTitle: L("关闭窗口", "Close Window", "ウインドウを閉じる", "윈도우 닫기"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         appMenu.addItem(withTitle: quitTitle, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
 
         let editItem = NSMenuItem()
-        let editMenu = NSMenu(title: L("编辑", "Edit", "編集"))
-        editMenu.addItem(withTitle: L("撤销", "Undo", "取り消す"), action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = editMenu.addItem(withTitle: L("重做", "Redo", "やり直す"), action: Selector(("redo:")), keyEquivalent: "z")
+        let editMenu = NSMenu(title: L("编辑", "Edit", "編集", "편집"))
+        editMenu.addItem(withTitle: L("撤销", "Undo", "取り消す", "실행 취소"), action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: L("重做", "Redo", "やり直す", "실행 복귀"), action: Selector(("redo:")), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: L("剪切", "Cut", "カット"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: L("拷贝", "Copy", "コピー"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: L("粘贴", "Paste", "ペースト"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: L("全选", "Select All", "すべてを選択"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: L("剪切", "Cut", "カット", "오려두기"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: L("拷贝", "Copy", "コピー", "복사"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: L("粘贴", "Paste", "ペースト", "붙여넣기"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: L("全选", "Select All", "すべてを選択", "전체 선택"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
         mainMenu.addItem(editItem)
 
         NSApp.mainMenu = mainMenu
     }
 
-    private let appName = L("随译", "Suiyi", "Suiyi")
-    private let quitTitle = L("退出随译", "Quit Suiyi", "Suiyi を終了")
+    private let appName = L("随译", "Suiyi", "Suiyi", "Suiyi")
+    private let quitTitle = L("退出随译", "Quit Suiyi", "Suiyi を終了", "Suiyi 종료")
     private var pauseTitle: String {
-        paused ? L("恢复划词", "Resume Selection Button", "選択ボタンを再開") : L("暂停划词", "Pause Selection Button", "選択ボタンを一時停止")
+        paused ? L("恢复划词", "Resume Selection Button", "選択ボタンを再開", "선택 버튼 다시 켜기") : L("暂停划词", "Pause Selection Button", "選択ボタンを一時停止", "선택 버튼 일시 정지")
     }
 
     private func makeItem(_ title: String, _ action: Selector, key: String = "",
@@ -165,13 +165,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(makeItem(L("翻译选中文字", "Translate Selection", "選択テキストを翻訳"), #selector(menuTranslate(_:)), key: "t", modifiers: [.command, .option]))
-        menu.addItem(makeItem(L("改写选中文字", "Rewrite Selection", "選択テキストを書き換え"), #selector(menuRewrite(_:)), key: "r", modifiers: [.command, .option]))
+        menu.addItem(makeItem(L("翻译选中文字", "Translate Selection", "選択テキストを翻訳", "선택한 텍스트 번역"), #selector(menuTranslate(_:)), key: "t", modifiers: [.command, .option]))
+        menu.addItem(makeItem(L("改写选中文字", "Rewrite Selection", "選択テキストを書き換え", "선택한 텍스트 다시 쓰기"), #selector(menuRewrite(_:)), key: "r", modifiers: [.command, .option]))
         menu.addItem(.separator())
         let pause = makeItem(pauseTitle, #selector(togglePause(_:)))
         menu.addItem(pause)
         pauseItem = pause
-        let access = makeItem(L("授予辅助功能权限…", "Grant Accessibility Access…", "アクセシビリティを許可…"), #selector(openAccessibilitySettings(_:)))
+        let access = makeItem(L("授予辅助功能权限…", "Grant Accessibility Access…", "アクセシビリティを許可…", "손쉬운 사용 권한 허용…"), #selector(openAccessibilitySettings(_:)))
         access.isHidden = AXIsProcessTrusted()
         menu.addItem(access)
         accessibilityItem = access
@@ -181,10 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(diagnosis)
         diagnosisItem = diagnosis
         menu.addItem(.separator())
-        menu.addItem(makeItem(L("设置…", "Settings…", "設定…"), #selector(openSettings(_:)), key: ","))
-        menu.addItem(makeItem(L("关于随译", "About Suiyi", "Suiyi について"), #selector(showAbout(_:))))
-        menu.addItem(makeItem(L("检查更新…", "Check for Updates…", "アップデートを確認…"), #selector(checkForUpdates(_:))))
-        menu.addItem(makeItem(L("反馈…", "Send Feedback…", "フィードバックを送信…"), #selector(sendFeedback(_:))))
+        menu.addItem(makeItem(L("设置…", "Settings…", "設定…", "설정…"), #selector(openSettings(_:)), key: ","))
+        menu.addItem(makeItem(L("关于随译", "About Suiyi", "Suiyi について", "Suiyi에 관하여"), #selector(showAbout(_:))))
+        menu.addItem(makeItem(L("检查更新…", "Check for Updates…", "アップデートを確認…", "업데이트 확인…"), #selector(checkForUpdates(_:))))
+        menu.addItem(makeItem(L("反馈…", "Send Feedback…", "フィードバックを送信…", "피드백 보내기…"), #selector(sendFeedback(_:))))
         menu.addItem(.separator())
         let quit = NSMenuItem(title: quitTitle, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
@@ -197,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         pauseItem?.title = pauseTitle
         accessibilityItem?.isHidden = AXIsProcessTrusted()
-        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：") + lastSelectionNote
+        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：", "최근 선택: ") + lastSelectionNote
         diagnosisItem?.isHidden = lastSelectionNote.isEmpty
     }
 
@@ -209,24 +209,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func note(for reason: SensitiveGuard.Reason) -> String {
         switch reason {
-        case .passwordApp: return L("密码类应用，不读取", "password app, not read", "パスワード管理アプリのため読み取らず")
-        case .passwordPage: return L("密码管理页面，不读取", "password-manager page, not read", "パスワード管理ページのため読み取らず")
-        case .extensionPage: return L("浏览器扩展页面，不读取", "browser extension page, not read", "拡張機能のページのため読み取らず")
-        case .codeApp: return L("终端或代码编辑器，默认不读取（设置 › 安全）", "terminal or code editor, off by default (Settings › Security)", "ターミナル／エディタは既定で読み取らず（設定 › セキュリティ）")
-        case .sensitiveWindow: return L("窗口标题像密码或密钥页面，不读取", "window title looks like passwords or keys, not read", "ウィンドウタイトルがパスワード等のため読み取らず")
-        case .sensitiveText: return L("选中内容像密码或密钥，不出按钮", "selection looks like a password or key, no button", "選択がパスワード等のためボタンなし")
+        case .passwordApp: return L("密码类应用，不读取", "password app, not read", "パスワード管理アプリのため読み取らず", "비밀번호 앱이라 읽지 않음")
+        case .passwordPage: return L("密码管理页面，不读取", "password-manager page, not read", "パスワード管理ページのため読み取らず", "비밀번호 관리자 페이지라 읽지 않음")
+        case .extensionPage: return L("浏览器扩展页面，不读取", "browser extension page, not read", "拡張機能のページのため読み取らず", "브라우저 확장 페이지라 읽지 않음")
+        case .codeApp: return L("终端或代码编辑器，默认不读取（设置 › 安全）", "terminal or code editor, off by default (Settings › Security)", "ターミナル／エディタは既定で読み取らず（設定 › セキュリティ）", "터미널 또는 코드 편집기, 기본값 꺼짐 (설정 › 보안)")
+        case .sensitiveWindow: return L("窗口标题像密码或密钥页面，不读取", "window title looks like passwords or keys, not read", "ウィンドウタイトルがパスワード等のため読み取らず", "윈도우 제목이 비밀번호나 키처럼 보여 읽지 않음")
+        case .sensitiveText: return L("选中内容像密码或密钥，不出按钮", "selection looks like a password or key, no button", "選択がパスワード等のためボタンなし", "선택한 내용이 비밀번호나 키처럼 보여 버튼을 표시하지 않음")
         }
     }
 
     private func note(for miss: SelectionReader.Miss?) -> String {
         switch miss {
-        case .secureInput: return L("正在安全输入（如密码框），不读取", "secure input is on (e.g. a password field), not read", "セキュア入力中のため読み取らず")
-        case .focusChanged: return L("焦点已切到其他应用", "focus moved to another app", "フォーカスが別のアプリに移動")
-        case .secureField: return L("选中的是密码框", "the selection is in a password field", "パスワード欄の選択")
-        case .notAtPointer: return L("读到的选区不在鼠标位置", "the selection found is not where the pointer is", "選択範囲がポインタの位置にない")
-        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 开启模拟 ⌘C，或按 ⌥⌘T", "couldn't read the selection: turn on ⌘C in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで ⌘C をオン、または ⌥⌘T")
-        case .copyFailed: return L("模拟 ⌘C 没有拿到文字", "⌘C returned no text", "⌘C でテキストを取得できず")
-        case nil: return L("没有读到文字", "no text read", "テキストを読み取れず")
+        case .secureInput: return L("正在安全输入（如密码框），不读取", "secure input is on (e.g. a password field), not read", "セキュア入力中のため読み取らず", "보안 입력이 켜져 있어(예: 비밀번호 칸) 읽지 않음")
+        case .focusChanged: return L("焦点已切到其他应用", "focus moved to another app", "フォーカスが別のアプリに移動", "포커스가 다른 앱으로 이동함")
+        case .secureField: return L("选中的是密码框", "the selection is in a password field", "パスワード欄の選択", "선택한 내용이 비밀번호 칸에 있음")
+        case .notAtPointer: return L("读到的选区不在鼠标位置", "the selection found is not where the pointer is", "選択範囲がポインタの位置にない", "찾은 선택 영역이 포인터 위치와 다름")
+        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 开启模拟 ⌘C，或按 ⌥⌘T", "couldn't read the selection: turn on ⌘C in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで ⌘C をオン、または ⌥⌘T", "선택한 내용을 읽지 못함: 설정 › 보안에서 ⌘C를 켜거나 ⌥⌘T를 누르세요")
+        case .copyFailed: return L("模拟 ⌘C 没有拿到文字", "⌘C returned no text", "⌘C でテキストを取得できず", "⌘C로 텍스트를 가져오지 못함")
+        case nil: return L("没有读到文字", "no text read", "テキストを読み取れず", "읽은 텍스트 없음")
         }
     }
 
@@ -264,7 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .applicationName: appName,
             .credits: NSAttributedString(string: L("Mac 全局翻译助手 · 无遥测，请求只发往你配置的接口。",
                                                            "Translate anything on your Mac · No telemetry; requests go only to the API you configure.",
-                                                           "Mac のどこでも翻訳 · テレメトリなし。リクエストは設定した API にだけ送られます。"),
+                                                           "Mac のどこでも翻訳 · テレメトリなし。リクエストは設定した API にだけ送られます。", "Mac 어디서나 번역 · 원격 분석 없음. 요청은 설정한 API로만 전송됩니다."),
                                          attributes: [.font: NSFont.systemFont(ofSize: 11),
                                                       .foregroundColor: NSColor.secondaryLabelColor]),
         ])
@@ -361,21 +361,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func selectionGesture(_ gesture: SelectionGesture) {
         guard !paused, AppSettings.showAnchor, AXIsProcessTrusted() else {
-            noteSelection(paused ? L("划词已暂停", "selection button paused", "選択ボタンは一時停止中")
-                : !AppSettings.showAnchor ? L("设置里关闭了「划词后显示按钮」", "the button is turned off in Settings", "設定でボタンがオフ")
-                : L("没有辅助功能权限", "no Accessibility access", "アクセシビリティの許可なし"))
+            noteSelection(paused ? L("划词已暂停", "selection button paused", "選択ボタンは一時停止中", "선택 버튼 일시 정지됨")
+                : !AppSettings.showAnchor ? L("设置里关闭了「划词后显示按钮」", "the button is turned off in Settings", "設定でボタンがオフ", "설정에서 버튼이 꺼져 있음")
+                : L("没有辅助功能权限", "no Accessibility access", "アクセシビリティの許可なし", "손쉬운 사용 권한 없음"))
             return
         }
         // Selecting text inside our own result card (e.g. the reply box) is not
         // a selection in the foreign app.
         if result.isVisible && result.frame.contains(gesture.up) { return }
         guard let target = foreignFocus() else {
-            noteSelection(L("没有找到有输入焦点的应用", "no app with keyboard focus found", "フォーカスのあるアプリが見つからず"))
+            noteSelection(L("没有找到有输入焦点的应用", "no app with keyboard focus found", "フォーカスのあるアプリが見つからず", "키보드 포커스를 가진 앱을 찾지 못함"))
             return
         }
         let bundleID = target.app?.bundleIdentifier
         if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
-            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ"), app: target.app)
+            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ", "제외 목록에 있는 앱"), app: target.app)
             return
         }
 
@@ -409,7 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.noteSelection(self.note(for: .sensitiveText), app: target.app)
                 return
             }
-            self.noteSelection(L("已弹出按钮", "button shown", "ボタンを表示"), app: target.app)
+            self.noteSelection(L("已弹出按钮", "button shown", "ボタンを表示", "버튼 표시됨"), app: target.app)
             let context = ContextCollector.collect(for: selection, windowTitle: title)
             self.pendingCapture = Capture(selection: selection, context: context)
             self.anchor.show(at: gesture.up)
@@ -444,7 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             startTrustPolling()
             result.showNotice(L("需要辅助功能权限：系统设置 › 隐私与安全性 › 辅助功能，打开随译。",
                                  "Accessibility access is needed: System Settings › Privacy & Security › Accessibility, turn on Suiyi.",
-                                 "アクセシビリティの許可が必要です：システム設定 › プライバシーとセキュリティ › アクセシビリティ で Suiyi をオンにしてください。"), at: point)
+                                 "アクセシビリティの許可が必要です：システム設定 › プライバシーとセキュリティ › アクセシビリティ で Suiyi をオンにしてください。", "손쉬운 사용 권한이 필요합니다: 시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용에서 Suiyi를 켜세요."), at: point)
             return
         }
         selectionGeneration += 1
@@ -454,7 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             guard let target = self.foreignFocus() else { return }
             if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
-                self.result.showNotice(L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。"), at: point)
+                self.result.showNotice(L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。", "제외된 앱이라 선택한 내용을 읽지 않았습니다."), at: point)
                 return
             }
             // 0.2.1.k.01: app, page and window checks come before any read (and before any ⌘C);
@@ -470,7 +470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 overridden = true
             }
             guard let selection = await self.reader.read(allowClipboard: true, gesturePoints: nil, target: target) else {
-                self.result.showNotice(L("没有检测到选中的文字。", "No selected text found.", "選択されたテキストが見つかりません。"), at: point)
+                self.result.showNotice(L("没有检测到选中的文字。", "No selected text found.", "選択されたテキストが見つかりません。", "선택한 텍스트를 찾지 못했습니다."), at: point)
                 return
             }
             if SensitiveGuard.looksSensitive(selection.text) {
@@ -521,7 +521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                          style: AppSettings.translationStyle, shortPhrase: shortPhrase)
             temperature = 0.3
         case .rewrite:
-            header = L("保持原语言", "Same language", "同じ言語のまま") + "  ·  \(context.appName)"
+            header = L("保持原语言", "Same language", "同じ言語のまま", "같은 언어 유지") + "  ·  \(context.appName)"
             messages = Prompts.rewrite(text: text, context: context)
             temperature = 0.7
         }
@@ -589,7 +589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 confirmGate.arm(key)
                 result.showReplyError(L("你写的回复看起来像密码、密钥或卡号，没有发送。如确需继续，请在 1 秒后、10 秒内再点一次翻译；这次不会记入历史。",
                                         "Your reply looks like a password, key or card number; nothing was sent. To continue anyway, press Translate again after 1 and within 10 seconds; it will not be saved to history.",
-                                        "返信がパスワード、キー、カード番号のようなので送信しませんでした。続行する場合は、1 秒以上たってから 10 秒以内にもう一度翻訳を押してください（履歴には残りません）。"))
+                                        "返信がパスワード、キー、カード番号のようなので送信しませんでした。続行する場合は、1 秒以上たってから 10 秒以内にもう一度翻訳を押してください（履歴には残りません）。", "답장이 비밀번호, 키 또는 카드 번호처럼 보여 보내지 않았습니다. 그래도 계속하려면 1초 후 10초 이내에 번역을 다시 누르세요. 기록에는 저장되지 않습니다."))
                 return
             }
             confirmGate.reset()

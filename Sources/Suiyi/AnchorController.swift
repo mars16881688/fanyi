@@ -50,8 +50,8 @@ final class AnchorController: NSObject {
         bubble.frame = NSRect(x: 0, y: 0, width: size, height: size)
         bubble.tint = .controlAccentColor
         bubble.iconPointSize = 15
-        bubble.setAccessibilityLabel(L("随译：翻译", "Suiyi: Translate", "Suiyi：翻訳"))
-        bubble.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）")
+        bubble.setAccessibilityLabel(L("随译：翻译", "Suiyi: Translate", "Suiyi：翻訳", "Suiyi: 번역"))
+        bubble.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）", "번역 (⌥⌘T)")
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
         circle.addSubview(bubble)

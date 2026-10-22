@@ -8,8 +8,8 @@ enum FeedbackKind: CaseIterable {
 
     var title: String {
         switch self {
-        case .bug: return L("问题", "Bug", "不具合")
-        case .idea: return L("建议", "Suggestion", "要望")
+        case .bug: return L("问题", "Bug", "不具合", "버그")
+        case .idea: return L("建议", "Suggestion", "要望", "제안")
         }
     }
 
@@ -28,7 +28,9 @@ struct FeedbackEnvironment: Equatable {
     static var current: FeedbackEnvironment {
         let info = Bundle.main.infoDictionary
         let os = ProcessInfo.processInfo.operatingSystemVersion
-        let interface: String = switch UILanguage.current { case .zh: "zh"; case .en: "en"; case .ja: "ja" }
+        let interface: String = switch UILanguage.current {
+            case .zh: "zh"; case .en: "en"; case .ja: "ja"; case .ko: "ko"
+        }
         return FeedbackEnvironment(
             appVersion: info?["CFBundleShortVersionString"] as? String ?? "?",
             build: info?["CFBundleVersion"] as? String ?? "?",
@@ -94,10 +96,10 @@ enum FeedbackLink {
 enum FeedbackPrompt {
     static func show() {
         let alert = NSAlert()
-        alert.messageText = L("反馈", "Feedback", "フィードバック")
+        alert.messageText = L("反馈", "Feedback", "フィードバック", "피드백")
         alert.informativeText = L("描述你遇到的问题或建议。提交到 GitHub 后公开可见，请不要填写 API Key、密码或私密内容。",
                                   "Describe the problem or idea. GitHub issues are public — don't include API keys, passwords or private text.",
-                                  "不具合や要望を書いてください。GitHub の issue は公開されるため、API キーやパスワード、機密情報は書かないでください。")
+                                  "不具合や要望を書いてください。GitHub の issue は公開されるため、API キーやパスワード、機密情報は書かないでください。", "문제나 아이디어를 적어 주세요. GitHub 이슈는 공개되므로 API 키, 비밀번호, 개인적인 내용은 적지 마세요.")
 
         let kinds = NSPopUpButton(frame: NSRect(x: 0, y: 128, width: 160, height: 26), pullsDown: false)
         kinds.addItems(withTitles: FeedbackKind.allCases.map(\.title))
@@ -113,9 +115,9 @@ enum FeedbackPrompt {
         container.addSubview(kinds)
         container.addSubview(scroll)
         alert.accessoryView = container
-        alert.addButton(withTitle: L("在 GitHub 提交", "Submit on GitHub", "GitHub で送信"))
-        alert.addButton(withTitle: L("发邮件", "Send by Email", "メールで送信"))
-        alert.addButton(withTitle: L("取消", "Cancel", "キャンセル"))
+        alert.addButton(withTitle: L("在 GitHub 提交", "Submit on GitHub", "GitHub で送信", "GitHub에 제출"))
+        alert.addButton(withTitle: L("发邮件", "Send by Email", "メールで送信", "이메일로 보내기"))
+        alert.addButton(withTitle: L("取消", "Cancel", "キャンセル", "취소"))
         alert.window.initialFirstResponder = text
 
         NSApp.activate(ignoringOtherApps: true)

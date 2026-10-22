@@ -10,9 +10,10 @@ struct Language: Hashable, Identifiable, Sendable {
     static let chinese = Language(code: "zh")
     static let english = Language(code: "en")
     static let japanese = Language(code: "ja")
+    static let korean = Language(code: "ko")
 
     /// Languages a user can choose as their own or outgoing language.
-    static let selectable: [Language] = [.chinese, .english, .japanese]
+    static let selectable: [Language] = [.chinese, .english, .japanese, .korean]
 
     /// Used in prompts.
     var promptName: String {
@@ -20,6 +21,7 @@ struct Language: Hashable, Identifiable, Sendable {
         case "zh": return "Simplified Chinese (简体中文)"
         case "en": return "English"
         case "ja": return "Japanese (日本語)"
+        case "ko": return "Korean (한국어)"
         default: return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
         }
     }
@@ -41,6 +43,7 @@ struct Language: Hashable, Identifiable, Sendable {
         case "zh": return "中文"
         case "en": return "English"
         case "ja": return "日本語"
+        case "ko": return "한국어"
         default: return Locale(identifier: code).localizedString(forLanguageCode: code) ?? shortLabel
         }
     }
@@ -51,12 +54,19 @@ struct Language: Hashable, Identifiable, Sendable {
         case ("zh", .zh): return "中文"
         case ("en", .zh): return "英文"
         case ("ja", .zh): return "日文"
+        case ("ko", .zh): return "韩文"
         case ("zh", .ja): return "中国語"
         case ("en", .ja): return "英語"
         case ("ja", .ja): return "日本語"
+        case ("ko", .ja): return "韓国語"
+        case ("zh", .ko): return "중국어"
+        case ("en", .ko): return "영어"
+        case ("ja", .ko): return "일본어"
+        case ("ko", .ko): return "한국어"
         case (_, .zh): return Locale(identifier: "zh-Hans").localizedString(forLanguageCode: code) ?? shortLabel
         case (_, .ja): return Locale(identifier: "ja").localizedString(forLanguageCode: code) ?? shortLabel
         case (_, .en): return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? shortLabel
+        case (_, .ko): return Locale(identifier: "ko").localizedString(forLanguageCode: code) ?? shortLabel
         }
     }
 
@@ -80,7 +90,7 @@ struct TranslationDirection: Equatable, Sendable {
     let source: Language?
     let target: Language
 
-    var sourceLabel: String { source?.shortLabel ?? L("自动", "Auto", "自動") }
+    var sourceLabel: String { source?.shortLabel ?? L("自动", "Auto", "自動", "자동") }
 }
 
 enum LanguageDetector {
