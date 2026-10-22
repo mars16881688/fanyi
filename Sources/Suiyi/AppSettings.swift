@@ -16,6 +16,9 @@ enum AppSettings {
         static let showAnchor = "showAnchorAfterSelection"
         static let excluded = "excludedBundleIDs"
         static let paused = "selectionPaused"
+        static let translationStyle = "translationStyle"
+        static let allowInCodeApps = "allowInCodeApps"
+        static let mouseClipboardFallback = "mouseClipboardFallback"
     }
 
     private static var store: UserDefaults { UserDefaults.standard }
@@ -27,6 +30,9 @@ enum AppSettings {
             Key.showAnchor: true,
             Key.excluded: defaultExcluded,
             Key.paused: false,
+            Key.translationStyle: TranslationStyle.colloquial.rawValue,
+            Key.allowInCodeApps: false,
+            Key.mouseClipboardFallback: true,
             "historyEnabled": false,
             "useMyStyle": false,
         ])
@@ -40,6 +46,28 @@ enum AppSettings {
     static var useMyStyle: Bool {
         get { store.object(forKey: "useMyStyle") as? Bool ?? false }
         set { store.set(newValue, forKey: "useMyStyle") }
+    }
+
+    /// 0.2.1.k.01: terminals and code editors often show keys and tokens, so they are off by default.
+    static var allowInCodeApps: Bool {
+        get { store.object(forKey: Key.allowInCodeApps) as? Bool ?? false }
+        set { store.set(newValue, forKey: Key.allowInCodeApps) }
+    }
+
+    /// Whether a mouse selection may fall back to a synthetic ⌘C (WeChat, Telegram and other apps
+    /// that do not expose the selection). 0.2.1.k.02: on by default again; the app, page and window
+    /// checks still run before any ⌘C, and the content check before the button appears.
+    static var mouseClipboardFallback: Bool {
+        get { store.object(forKey: Key.mouseClipboardFallback) as? Bool ?? true }
+        set { store.set(newValue, forKey: Key.mouseClipboardFallback) }
+    }
+
+    /// 0.2.1.k.01 shipped with the fallback off and may have saved that; turn it back on once.
+    static func applyK02Defaults() {
+        let marker = "k02.mouseClipboardFallbackRestored"
+        guard !store.bool(forKey: marker) else { return }
+        store.set(true, forKey: Key.mouseClipboardFallback)
+        store.set(true, forKey: marker)
     }
 
     static var baseURL: String {
@@ -103,6 +131,11 @@ enum AppSettings {
         return (mine, outgoing)
     }
 
+    static var translationStyle: TranslationStyle {
+        get { TranslationStyle(rawValue: store.string(forKey: Key.translationStyle) ?? "") ?? .colloquial }
+        set { store.set(newValue.rawValue, forKey: Key.translationStyle) }
+    }
+
     static var showAnchor: Bool {
         get { store.bool(forKey: Key.showAnchor) }
         set { store.set(newValue, forKey: Key.showAnchor) }
@@ -132,5 +165,29 @@ enum AppSettings {
     static func isExcluded(bundleID: String?) -> Bool {
         guard let id = bundleID?.lowercased(), !id.isEmpty else { return false }
         return excludedBundleIDs.contains(id)
+    }
+}
+
+/// How translations lean: everyday speech or business correspondence. Rewrite is unaffected.
+enum TranslationStyle: String, CaseIterable, Identifiable, Sendable {
+    case colloquial
+    case business
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .colloquial: return L("口语倾向", "Conversational", "口語寄り")
+        case .business: return L("商务倾向", "Business", "ビジネス寄り")
+        }
+    }
+
+    var promptRule: String {
+        switch self {
+        case .colloquial:
+            return "- Style: lean conversational. Use natural, everyday wording that a native speaker would actually say; avoid stiff, literal or overly formal phrasing."
+        case .business:
+            return "- Style: lean business. Use clear, polite, professional wording suited to work e-mail and business communication; avoid slang and overly casual phrasing."
+        }
     }
 }

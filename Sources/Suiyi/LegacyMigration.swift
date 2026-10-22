@@ -16,11 +16,8 @@ enum LegacyMigration {
         migrateDefaults(into: defaults)
         migrateAPIKey()
         migrateDataFolder()
-        do {
-            try AgentIntegration.migrateLegacyBlocks()
-        } catch {
-            NSLog("Suiyi: migrating agent blocks failed: %@", error.localizedDescription)
-        }
+        // 0.2.1.k.01: agent files (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md) are never rewritten
+        // automatically; an old Fanyi block is left for the user to remove in Settings.
         defaults.set(true, forKey: doneKey)
     }
 

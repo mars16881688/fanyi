@@ -4,6 +4,8 @@ import ApplicationServices
 struct Capture {
     let selection: CapturedSelection
     let context: AppContext
+    /// The user confirmed a SensitiveGuard block by triggering again; never saved to history.
+    var overridden = false
 }
 
 @MainActor
@@ -18,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var pauseItem: NSMenuItem?
     private var accessibilityItem: NSMenuItem?
+    /// 0.2.1.k.02: why the last mouse selection did or did not get a button (no selected text).
+    private var diagnosisItem: NSMenuItem?
+    private var lastSelectionNote = ""
 
     private var reader: SelectionReader!
     private var monitor: SelectionMonitor!
@@ -34,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var replyTask: Task<Void, Never>?
     private var replyContext: AppContext?
     private var replyDirection: TranslationDirection?
+    /// SensitiveGuard blocks (other than password apps and pages) are confirmed by triggering again
+    /// on the same app, window and text, 1–10 seconds after the notice.
+    private var confirmGate = SensitiveGuard.ConfirmGate()
     private var completedTranslation: String?
     /// Finished outputs for the current selection, so switching tabs back and forth does not re-request.
     private var cachedOutputs: [ActionKind: String] = [:]
@@ -48,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         LegacyMigration.runIfNeeded()
         AppSettings.registerDefaults()
+        AppSettings.applyK02Defaults()
         paused = AppSettings.paused
 
         reader = SelectionReader()
@@ -166,6 +175,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         access.isHidden = AXIsProcessTrusted()
         menu.addItem(access)
         accessibilityItem = access
+        let diagnosis = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        diagnosis.isEnabled = false
+        diagnosis.isHidden = true
+        menu.addItem(diagnosis)
+        diagnosisItem = diagnosis
         menu.addItem(.separator())
         menu.addItem(makeItem(L("设置…", "Settings…", "設定…"), #selector(openSettings(_:)), key: ","))
         menu.addItem(makeItem(L("关于随译", "About Suiyi", "Suiyi について"), #selector(showAbout(_:))))
@@ -183,6 +197,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         pauseItem?.title = pauseTitle
         accessibilityItem?.isHidden = AXIsProcessTrusted()
+        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：") + lastSelectionNote
+        diagnosisItem?.isHidden = lastSelectionNote.isEmpty
+    }
+
+    /// Records the outcome of a mouse selection for the menu's diagnosis line; never the text itself.
+    private func noteSelection(_ message: String, app: NSRunningApplication? = nil) {
+        let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        lastSelectionNote = [message, app?.localizedName, time].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private func note(for reason: SensitiveGuard.Reason) -> String {
+        switch reason {
+        case .passwordApp: return L("密码类应用，不读取", "password app, not read", "パスワード管理アプリのため読み取らず")
+        case .passwordPage: return L("密码管理页面，不读取", "password-manager page, not read", "パスワード管理ページのため読み取らず")
+        case .extensionPage: return L("浏览器扩展页面，不读取", "browser extension page, not read", "拡張機能のページのため読み取らず")
+        case .codeApp: return L("终端或代码编辑器，默认不读取（设置 › 安全）", "terminal or code editor, off by default (Settings › Security)", "ターミナル／エディタは既定で読み取らず（設定 › セキュリティ）")
+        case .sensitiveWindow: return L("窗口标题像密码或密钥页面，不读取", "window title looks like passwords or keys, not read", "ウィンドウタイトルがパスワード等のため読み取らず")
+        case .sensitiveText: return L("选中内容像密码或密钥，不出按钮", "selection looks like a password or key, no button", "選択がパスワード等のためボタンなし")
+        }
+    }
+
+    private func note(for miss: SelectionReader.Miss?) -> String {
+        switch miss {
+        case .secureInput: return L("正在安全输入（如密码框），不读取", "secure input is on (e.g. a password field), not read", "セキュア入力中のため読み取らず")
+        case .focusChanged: return L("焦点已切到其他应用", "focus moved to another app", "フォーカスが別のアプリに移動")
+        case .secureField: return L("选中的是密码框", "the selection is in a password field", "パスワード欄の選択")
+        case .notAtPointer: return L("读到的选区不在鼠标位置", "the selection found is not where the pointer is", "選択範囲がポインタの位置にない")
+        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 开启模拟 ⌘C，或按 ⌥⌘T", "couldn't read the selection: turn on ⌘C in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで ⌘C をオン、または ⌥⌘T")
+        case .copyFailed: return L("模拟 ⌘C 没有拿到文字", "⌘C returned no text", "⌘C でテキストを取得できず")
+        case nil: return L("没有读到文字", "no text read", "テキストを読み取れず")
+        }
     }
 
     @objc private func menuTranslate(_ sender: Any?) {
@@ -307,35 +352,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func frontmostForeignApp() -> NSRunningApplication? {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
-        return app
+    /// The process that really has keyboard focus (never Suiyi itself).
+    private func foreignFocus() -> SelectionReader.FocusTarget? {
+        let own = ProcessInfo.processInfo.processIdentifier
+        guard let target = reader.focusTarget(), target.pid != own, target.focusPID != own else { return nil }
+        return target
     }
 
     private func selectionGesture(_ gesture: SelectionGesture) {
-        guard !paused, AppSettings.showAnchor, AXIsProcessTrusted() else { return }
-        guard let app = frontmostForeignApp() else { return }
-        if AppSettings.isExcluded(bundleID: app.bundleIdentifier) { return }
+        guard !paused, AppSettings.showAnchor, AXIsProcessTrusted() else {
+            noteSelection(paused ? L("划词已暂停", "selection button paused", "選択ボタンは一時停止中")
+                : !AppSettings.showAnchor ? L("设置里关闭了「划词后显示按钮」", "the button is turned off in Settings", "設定でボタンがオフ")
+                : L("没有辅助功能权限", "no Accessibility access", "アクセシビリティの許可なし"))
+            return
+        }
         // Selecting text inside our own result card (e.g. the reply box) is not
         // a selection in the foreign app.
         if result.isVisible && result.frame.contains(gesture.up) { return }
+        guard let target = foreignFocus() else {
+            noteSelection(L("没有找到有输入焦点的应用", "no app with keyboard focus found", "フォーカスのあるアプリが見つからず"))
+            return
+        }
+        let bundleID = target.app?.bundleIdentifier
+        if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
+            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ"), app: target.app)
+            return
+        }
 
-        // Clipboard fallback only for real drags (not double-clicks), and never
-        // in apps where ⌘C would copy something other than text.
-        let bundle = app.bundleIdentifier?.lowercased() ?? ""
-        let allowClipboard = gesture.kind == .drag && !Self.noClipboardFallbackOnMouse.contains(bundle)
+        // 0.2.1.k.01: password apps and pages, terminals/editors (unless allowed) and windows whose
+        // title suggests credentials get no button, and nothing is read from them.
+        let title = ContextCollector.windowTitle(pid: target.pid)
+        if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
+                                                   allowCodeApps: AppSettings.allowInCodeApps) {
+            noteSelection(note(for: reason), app: target.app)
+            return
+        }
+
+        // Clipboard fallback only when turned on in Settings, only for real drags (not
+        // double-clicks), and never in apps where ⌘C would copy something other than text.
+        let bundle = bundleID?.lowercased() ?? ""
+        let allowClipboard = AppSettings.mouseClipboardFallback && gesture.kind == .drag
+            && !Self.noClipboardFallbackOnMouse.contains(bundle)
 
         selectionGeneration += 1
         let generation = selectionGeneration
         Task { @MainActor in
             guard let selection = await self.reader.read(allowClipboard: allowClipboard,
-                                                         gesturePoints: [gesture.down, gesture.up]) else { return }
+                                                         gesturePoints: [gesture.down, gesture.up],
+                                                         target: target) else {
+                if generation == self.selectionGeneration { self.noteSelection(self.note(for: self.reader.lastMiss), app: target.app) }
+                return
+            }
             guard generation == self.selectionGeneration, !self.paused else { return }
-            let context = ContextCollector.collect(for: selection)
+            // A password-looking selection gets no button: one stray click must not send it.
+            if SensitiveGuard.looksSensitive(selection.text) {
+                self.noteSelection(self.note(for: .sensitiveText), app: target.app)
+                return
+            }
+            self.noteSelection(L("已弹出按钮", "button shown", "ボタンを表示"), app: target.app)
+            let context = ContextCollector.collect(for: selection, windowTitle: title)
             self.pendingCapture = Capture(selection: selection, context: context)
             self.anchor.show(at: gesture.up)
         }
+    }
+
+    /// Shows the notice and arms the gate, so the same trigger 1–10 s later may continue.
+    private func block(_ key: SensitiveGuard.ConfirmGate.Key, at point: NSPoint) {
+        confirmGate.arm(key)
+        result.showNotice(SensitiveGuard.notice(for: key.reason), at: point)
     }
 
     private func anchorPicked(_ kind: ActionKind) {
@@ -368,17 +452,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if delayNanos > 0 {
                 try? await Task.sleep(nanoseconds: delayNanos)
             }
-            guard let app = self.frontmostForeignApp() else { return }
-            if AppSettings.isExcluded(bundleID: app.bundleIdentifier) {
+            guard let target = self.foreignFocus() else { return }
+            if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
                 self.result.showNotice(L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。"), at: point)
                 return
             }
-            guard let selection = await self.reader.read(allowClipboard: true, gesturePoints: nil) else {
+            // 0.2.1.k.01: app, page and window checks come before any read (and before any ⌘C);
+            // the content check comes after the read and before anything is sent. Each block needs
+            // its own confirmation, and a window-level confirmation never skips the content check.
+            let pid = target.pid
+            let title = ContextCollector.windowTitle(pid: pid)
+            var overridden = false
+            if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title,
+                                                       pageURL: target.pageURL, allowCodeApps: AppSettings.allowInCodeApps) {
+                let key = SensitiveGuard.ConfirmGate.Key(reason: reason, pid: pid, title: title, text: nil)
+                guard self.confirmGate.isConfirmed(key) else { self.block(key, at: point); return }
+                overridden = true
+            }
+            guard let selection = await self.reader.read(allowClipboard: true, gesturePoints: nil, target: target) else {
                 self.result.showNotice(L("没有检测到选中的文字。", "No selected text found.", "選択されたテキストが見つかりません。"), at: point)
                 return
             }
-            let context = ContextCollector.collect(for: selection)
-            self.run(kind, capture: Capture(selection: selection, context: context), at: point)
+            if SensitiveGuard.looksSensitive(selection.text) {
+                let key = SensitiveGuard.ConfirmGate.Key(reason: .sensitiveText, pid: pid, title: title, text: selection.text)
+                guard self.confirmGate.isConfirmed(key) else { self.block(key, at: point); return }
+                overridden = true
+            }
+            self.confirmGate.reset()
+            let context = ContextCollector.collect(for: selection, windowTitle: title)
+            self.run(kind, capture: Capture(selection: selection, context: context, overridden: overridden), at: point)
         }
     }
 
@@ -391,6 +493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         requestGeneration += 1
         let generation = requestGeneration
         lastCapture = capture
+        result.copiesAreSensitive = capture.overridden
         streamedText = ""
         completedTranslation = nil
         anchor.hide()
@@ -414,7 +517,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             shortPhrase = Prompts.isShortPhrase(text)
             header = "\(direction.sourceLabel) → \(direction.target.shortLabel)  ·  \(context.appName)"
-            messages = Prompts.translate(text: text, direction: direction, context: context, shortPhrase: shortPhrase)
+            messages = Prompts.translate(text: text, direction: direction, context: context,
+                                         style: AppSettings.translationStyle, shortPhrase: shortPhrase)
             temperature = 0.3
         case .rewrite:
             header = L("保持原语言", "Same language", "同じ言語のまま") + "  ·  \(context.appName)"
@@ -450,9 +554,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.result.finish()
                 self.completedTranslation = self.streamedText
                 self.cachedOutputs[kind] = self.streamedText
-                self.logHistory(HistoryEntry(mode: kind == .translate ? "translate" : "rewrite",
-                    appBundleID: capture.selection.bundleID, appName: context.appName,
-                    original: text, translation: self.streamedText))
+                if !capture.overridden {
+                    self.logHistory(HistoryEntry(mode: kind == .translate ? "translate" : "rewrite",
+                        appBundleID: capture.selection.bundleID, appName: context.appName,
+                        original: text, translation: self.streamedText))
+                }
             } catch {
                 guard self.requestGeneration == generation, !Task.isCancelled else { return }
                 if error is CancellationError { return }
@@ -474,6 +580,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func translateReply(_ text: String) {
         guard let context = replyContext, let direction = replyDirection,
               result.isVisible, !text.trimmed.isEmpty else { return }
+        // 0.2.1.k.01: a reply that looks like a password or key is held back until Translate is
+        // pressed again on the same text 1–10 seconds later; such replies are never saved to history.
+        let sensitiveReply = SensitiveGuard.looksSensitive(text)
+        if sensitiveReply {
+            let key = SensitiveGuard.ConfirmGate.Key(reason: .sensitiveText, pid: 0, title: "reply", text: text)
+            guard confirmGate.isConfirmed(key) else {
+                confirmGate.arm(key)
+                result.showReplyError(L("你写的回复看起来像密码、密钥或卡号，没有发送。如确需继续，请在 1 秒后、10 秒内再点一次翻译；这次不会记入历史。",
+                                        "Your reply looks like a password, key or card number; nothing was sent. To continue anyway, press Translate again after 1 and within 10 seconds; it will not be saved to history.",
+                                        "返信がパスワード、キー、カード番号のようなので送信しませんでした。続行する場合は、1 秒以上たってから 10 秒以内にもう一度翻訳を押してください（履歴には残りません）。"))
+                return
+            }
+            confirmGate.reset()
+            result.copiesAreSensitive = true
+        }
         replyTask?.cancel()
         replyGeneration += 1
         let generation = replyGeneration
@@ -485,7 +606,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let capture = lastCapture, let translation = completedTranslation else { return }
         streamedReply = ""
         let messages = StyleContext.replyMessages(Prompts.reply(
-            text: text, direction: direction, context: context, inReplyTo: capture.selection.text))
+            text: text, direction: direction, context: context, style: AppSettings.translationStyle,
+            inReplyTo: capture.selection.text))
         replyTask = Task { @MainActor in
             do {
                 try await LLMClient.streamChat(config: config, messages: messages, temperature: 0.3) { [weak self] delta in
@@ -495,9 +617,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 guard self.replyGeneration == generation, !Task.isCancelled else { return }
                 self.result.finishReply()
-                self.logHistory(HistoryEntry(mode: "reply", appBundleID: capture.selection.bundleID,
-                    appName: context.appName, original: capture.selection.text, translation: translation,
-                    replyZH: text, replyEN: self.streamedReply))
+                if !capture.overridden, !sensitiveReply {
+                    self.logHistory(HistoryEntry(mode: "reply", appBundleID: capture.selection.bundleID,
+                        appName: context.appName, original: capture.selection.text, translation: translation,
+                        replyZH: text, replyEN: self.streamedReply))
+                }
             } catch {
                 guard self.replyGeneration == generation, !Task.isCancelled else { return }
                 if error is CancellationError { return }
