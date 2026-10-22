@@ -61,6 +61,27 @@ enum AX {
         return role == "AXSecureTextField" || subrole == "AXSecureTextField"
     }
 
+    /// The element of `appElement`'s app under a Cocoa screen point (bottom-left origin).
+    static func element(at point: NSPoint, in appElement: AXUIElement) -> AXUIElement? {
+        let primaryHeight = ScreenGeometry.primaryScreenHeight
+        guard primaryHeight > 0 else { return nil }
+        var hit: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(appElement, Float(point.x), Float(primaryHeight - point.y), &hit) == .success
+        else { return nil }
+        return hit
+    }
+
+    /// 0.2.1.k.02: the selection of a WebKit / Chromium web area through text markers
+    /// (AXSelectedTextMarkerRange + AXStringForTextMarkerRange), the route screen readers use. It
+    /// reads ordinary page text, where kAXSelectedText is often empty, without touching the clipboard.
+    static func webSelectedText(_ webArea: AXUIElement) -> String? {
+        guard let range = copy(webArea, "AXSelectedTextMarkerRange") else { return nil }
+        var value: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(webArea, "AXStringForTextMarkerRange" as CFString, range, &value) == .success,
+              let value, CFGetTypeID(value) == CFStringGetTypeID() else { return nil }
+        return (value as! CFString) as String
+    }
+
     /// Element frame converted to Cocoa screen coordinates (bottom-left origin).
     static func cocoaFrame(of element: AXUIElement) -> CGRect? {
         guard let origin = point(element, kAXPositionAttribute),
