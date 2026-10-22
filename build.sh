@@ -111,6 +111,11 @@ fi
 echo "Signing identity: $SIGN_IDENTITY ${HASH:-}"
 # Certificate identities get codesign's default designated requirement
 # (identifier + certificate leaf hash), which does not change between builds.
+# A Developer ID identity (for distribution) also needs the hardened runtime
+# and a secure timestamp, both required for notarization.
+if [[ "$SIGN_IDENTITY" == "Developer ID Application"* ]]; then
+    SIGN_ARGS+=(--options runtime --timestamp)
+fi
 codesign --force --deep "${SIGN_ARGS[@]}" --identifier ai.mars.suiyi "$APP"
 
 echo "Built: $(pwd)/$APP"

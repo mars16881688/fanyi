@@ -33,6 +33,27 @@ cd fanyi  # 仓库目录名暂未改
 
 产物：`build/Suiyi.app`（App 图标由 `Resources/AppIcon.png` 在构建时生成 `AppIcon.icns`）（bundle id `ai.mars.suiyi`；优先使用稳定本地签名，身份不存在时回退 ad-hoc）。
 
+## 打包分发
+
+```bash
+./scripts/package.sh
+```
+
+产出 `dist/Suiyi-<版本>.zip`（`ditto` 打包，保留签名）并打印 SHA-256。用本机签名时，同事首次打开需在 **系统设置 › 隐私与安全性** 点「仍要打开」。
+
+有 Apple Developer ID 时可产出公证版本，双击即开、无警告：
+
+```bash
+xcrun notarytool store-credentials suiyi-notary --apple-id <Apple ID> --team-id <TEAMID>
+SUIYI_SIGN_IDENTITY="Developer ID Application: <名称> (<TEAMID>)" SUIYI_NOTARY_PROFILE=suiyi-notary ./scripts/package.sh
+```
+
+使用 Developer ID 签名时，`build.sh` 会自动开启 hardened runtime 和安全时间戳；脚本随后提交公证、装订票据并用 `spctl` 校验。
+
+## 检查更新
+
+菜单 **检查更新…** 只在点击时读取官网的 `latest.json`（版本号、下载地址、更新说明），有新版时提示前往下载。随译不会自动联网检查。发布新版：改 `build.sh` 中的版本号，运行 `scripts/package.sh`，再更新官网仓库的 `latest.json`。
+
 ## 图标
 
 `Resources/AppIcon.iconset` 由 `swift scripts/make-icon.swift Resources` 以矢量逐尺寸渲染（16 px 到 1024 px 各自按原生像素绘制，小尺寸去阴影、加描边），`build.sh` 直接用它生成 `AppIcon.icns`。改图标设计后重新运行该脚本。

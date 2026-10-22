@@ -95,3 +95,28 @@ struct SSEParserTests {
         #expect(SSEParser.parse(#"{"choices":[]}"#) == .nonEvent(#"{"choices":[]}"#))
     }
 }
+
+@Suite("UpdateChecker")
+struct UpdateCheckerTests {
+    @Test("Version comparison", arguments: [
+        ("0.3.0", "0.2.0", true), ("0.10.0", "0.9.3", true), ("1.0", "1.0.0", false),
+        ("0.2.0", "0.2.0", false), ("0.1.9", "0.2.0", false), ("1.0.1", "1.0", true), (" 2.0 ", "1.9.9", true),
+    ])
+    func compare(candidate: String, current: String, newer: Bool) {
+        #expect(UpdateChecker.isNewer(candidate, than: current) == newer)
+    }
+
+    @Test("Feed format decodes, notes optional")
+    func decodes() throws {
+        let full = try JSONDecoder().decode(ReleaseInfo.self, from: Data(#"{"version":"0.2.0","url":"https://example.com","notes":{"zh":"新","en":"New"}}"#.utf8))
+        #expect(full.version == "0.2.0" && full.notes?["en"] == "New")
+        let bare = try JSONDecoder().decode(ReleaseInfo.self, from: Data(#"{"version":"1.0","url":"https://example.com"}"#.utf8))
+        #expect(bare.notes == nil)
+    }
+
+    @Test("Feed is HTTPS on the official site")
+    func feed() {
+        #expect(UpdateChecker.feedURL.scheme == "https")
+        #expect(UpdateChecker.feedURL.host == "mars16881688.github.io")
+    }
+}
