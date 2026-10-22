@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         monitor.start()
         registerHotKeys()
         installKeyMonitors()
+        UpdateChecker.startAutomaticChecks()
 
         if !AXIsProcessTrusted() {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary

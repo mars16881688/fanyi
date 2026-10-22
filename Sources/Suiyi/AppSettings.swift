@@ -19,6 +19,8 @@ enum AppSettings {
         static let translationStyle = "translationStyle"
         static let allowInCodeApps = "allowInCodeApps"
         static let mouseClipboardFallback = "mouseClipboardFallback"
+        static let autoCheckUpdates = "autoCheckUpdates"
+        static let lastUpdateCheck = "lastUpdateCheck"
     }
 
     private static var store: UserDefaults { UserDefaults.standard }
@@ -33,6 +35,7 @@ enum AppSettings {
             Key.translationStyle: TranslationStyle.colloquial.rawValue,
             Key.allowInCodeApps: false,
             Key.mouseClipboardFallback: true,
+            Key.autoCheckUpdates: true,
             "historyEnabled": false,
             "useMyStyle": false,
         ])
@@ -68,6 +71,17 @@ enum AppSettings {
         guard !store.bool(forKey: marker) else { return }
         store.set(true, forKey: Key.mouseClipboardFallback)
         store.set(true, forKey: marker)
+    }
+
+    /// Reads latest.json from the official site about once a day; no user data is sent.
+    static var autoCheckUpdates: Bool {
+        get { store.object(forKey: Key.autoCheckUpdates) as? Bool ?? true }
+        set { store.set(newValue, forKey: Key.autoCheckUpdates) }
+    }
+
+    static var lastUpdateCheck: Date? {
+        get { store.object(forKey: Key.lastUpdateCheck) as? Date }
+        set { store.set(newValue, forKey: Key.lastUpdateCheck) }
     }
 
     static var baseURL: String {
