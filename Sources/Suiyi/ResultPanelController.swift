@@ -727,10 +727,23 @@ final class ResultPanelController: NSObject {
         TranslationOutput.primary(rawText, isTranslation: kind == .translate, shortPhrase: shortPhrase)
     }
 
+    /// 0.2.1.k.01: set for results the user sent after confirming a SensitiveGuard block. Copies are
+    /// then marked so clipboard managers skip them and Universal Clipboard does not hand them off.
+    var copiesAreSensitive = false
+
     private func copyToPasteboard(_ text: String) {
         let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        guard copiesAreSensitive else {
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            return
+        }
+        pasteboard.prepareForNewContents(with: .currentHostOnly)
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        pasteboard.writeObjects([item])
     }
 
     private func flashCopied(_ button: NSButton) {
