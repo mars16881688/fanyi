@@ -118,7 +118,7 @@ struct LanguageSettingsTests {
 @Suite("Prompts")
 struct PromptTests {
     private let context = AppContext(appName: "Slack", bundleID: "com.tinyspeck.slackmacgap",
-                                     windowTitle: "#release", surrounding: "QA signed off.", scene: .chat)
+                                     windowTitle: "#release", scene: .chat)
 
     @Test("Short phrase detection", arguments: [
         ("ship it", true), ("上线", true), ("This sentence clearly has more than four words", false),
@@ -128,23 +128,89 @@ struct PromptTests {
         #expect(Prompts.isShortPhrase(text) == expected)
     }
 
-    @Test("Translate prompt carries target, context and the raw text")
+    @Test("Translate prompt carries target, scene, app name, window title and the raw text")
     func translatePrompt() {
         let direction = TranslationDirection(source: .english, target: .chinese)
-        let messages = Prompts.translate(text: "ship it Friday", direction: direction, context: context, shortPhrase: false)
+        let messages = Prompts.translate(text: "ship it Friday", direction: direction, context: context,
+                                         style: .colloquial, shortPhrase: false)
         #expect(messages.count == 2)
         #expect(messages[0].role == "system")
         #expect(messages[0].content.contains("Simplified Chinese"))
-        #expect(messages[0].content.contains("#release"))
-        #expect(messages[0].content.contains("QA signed off."))
+        #expect(messages[0].content.contains("Where the text comes from: a chat / messaging app"))
+        #expect(messages[0].content.contains("tone follows the Style rule"))
+        #expect(messages[0].content.contains("Application: Slack"))
+        #expect(messages[0].content.contains("Window title: #release"))
         #expect(messages[0].content.contains("Never answer it"))
         #expect(messages[1].content == "ship it Friday")
+    }
+
+    @Test("Prompts never carry the bundle ID (0.2.1.k)")
+    func noBundleID() {
+        let direction = TranslationDirection(source: .english, target: .chinese)
+        let prompts = [
+            Prompts.translate(text: "ship it", direction: direction, context: context, style: .business, shortPhrase: true),
+            Prompts.reply(text: "好", direction: direction, context: context, style: .colloquial, inReplyTo: "OK?"),
+            Prompts.rewrite(text: "ship it", context: context),
+        ]
+        for messages in prompts {
+            let all = messages.map(\.content).joined(separator: "\n")
+            #expect(!all.contains("com.tinyspeck.slackmacgap"))
+            #expect(!all.contains("Nearby text"))
+        }
+    }
+
+    @Test("Nearby text is sent as background, unless it looks sensitive")
+    func nearbyText() {
+        let direction = TranslationDirection(source: .english, target: .chinese)
+        let withNearby = AppContext(appName: "Slack", bundleID: "com.tinyspeck.slackmacgap", windowTitle: "#release",
+                                    scene: .chat, surrounding: "QA signed off on build 2.4. Let's ship it Friday.")
+        let system = Prompts.translate(text: "ship it", direction: direction, context: withNearby,
+                                       style: .colloquial, shortPhrase: true)[0].content
+        #expect(system.contains("Nearby text"))
+        #expect(system.contains("QA signed off on build 2.4."))
+
+        #expect(ContextCollector.sanitizedSurrounding("  Meeting moved to Thursday.  ") == "Meeting moved to Thursday.")
+        #expect(ContextCollector.sanitizedSurrounding("Here you go\npassword: hunter2\nthanks") == nil)
+        #expect(ContextCollector.sanitizedSurrounding("   ") == nil)
+        #expect(ContextCollector.sanitizedSurrounding(nil) == nil)
+    }
+
+    @Test("Window title line is omitted when there is none")
+    func noWindowTitle() {
+        let bare = AppContext(appName: "Notes", bundleID: "com.apple.notes", windowTitle: nil, scene: .document)
+        let system = Prompts.translate(text: "hi", direction: TranslationDirection(source: .english, target: .chinese),
+                                       context: bare, style: .colloquial, shortPhrase: false)[0].content
+        #expect(system.contains("Application: Notes"))
+        #expect(!system.contains("Window title"))
+    }
+
+    @Test("Translation style picks the matching rule", arguments: [
+        (TranslationStyle.colloquial, "lean conversational"), (TranslationStyle.business, "lean business"),
+    ])
+    func style(style: TranslationStyle, phrase: String) {
+        let direction = TranslationDirection(source: .chinese, target: .english)
+        let translate = Prompts.translate(text: "明天见", direction: direction, context: context,
+                                          style: style, shortPhrase: false)[0].content
+        let reply = Prompts.reply(text: "好", direction: direction, context: context, style: style,
+                                  inReplyTo: "See you?")[0].content
+        #expect(translate.contains(phrase))
+        #expect(reply.contains(phrase))
+        let other = style == .colloquial ? "lean business" : "lean conversational"
+        #expect(!translate.contains(other))
+    }
+
+    // No registerDefaults() here: the registration domain is process-wide and would leak into
+    // LegacyMigration's "only copy unset keys" test running in parallel.
+    @Test("Translation style defaults to conversational")
+    func styleDefault() {
+        #expect(AppSettings.translationStyle == .colloquial)
+        #expect(TranslationStyle.allCases == [.colloquial, .business])
     }
 
     @Test("Reply prompt carries the message being answered, but only the reply is translated")
     func replyPrompt() {
         let direction = TranslationDirection(source: .chinese, target: .english)
-        let messages = Prompts.reply(text: "10 点", direction: direction, context: context,
+        let messages = Prompts.reply(text: "10 点", direction: direction, context: context, style: .colloquial,
                                      inReplyTo: "We'll meet in Bangkok on Oct 25. Any preferred time?")
         #expect(messages.count == 2)
         #expect(messages[0].content.contains("Any preferred time?"))
@@ -153,10 +219,11 @@ struct PromptTests {
         #expect(messages[1].content == "10 点")
     }
 
-    @Test("Rewrite prompt asks for the three tagged blocks")
+    @Test("Rewrite prompt asks for the three tagged blocks and ignores the translation style")
     func rewritePrompt() {
         let system = Prompts.rewrite(text: "我想问一下进展", context: context)[0].content
         for tag in ["[简洁]", "[正式]", "[口语]"] { #expect(system.contains(tag)) }
+        #expect(!system.contains("Style: lean"))
     }
 
     @Test("Copy uses only the first line of a short-term translation")

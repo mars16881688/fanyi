@@ -20,6 +20,15 @@ struct EndpointTests {
     func rejects(base: String) {
         #expect(LLMConfig(baseURL: base, apiKey: "k", model: "m").endpoint == nil)
     }
+
+    @Test("Plain http only to this Mac (0.2.1.k.01)", arguments: [
+        ("http://127.0.0.1:11434/v1", true), ("http://[::1]:8080/v1", true), ("http://localhost/v1", true),
+        ("http://192.168.1.10/v1", false), ("http://api.deepseek.com/v1", false), ("http://studio.local/v1", false),
+        ("https://api.deepseek.com/v1", true),
+    ])
+    func plainHTTP(base: String, allowed: Bool) {
+        #expect((LLMConfig(baseURL: base, apiKey: "k", model: "m").endpoint != nil) == allowed)
+    }
 }
 
 @Suite("Error messages")
@@ -101,6 +110,8 @@ struct UpdateCheckerTests {
     @Test("Version comparison", arguments: [
         ("0.3.0", "0.2.0", true), ("0.10.0", "0.9.3", true), ("1.0", "1.0.0", false),
         ("0.2.0", "0.2.0", false), ("0.1.9", "0.2.0", false), ("1.0.1", "1.0", true), (" 2.0 ", "1.9.9", true),
+        // Kimi builds (0.2.1.k, 0.2.1.k.01 …): the same upstream release is not offered, a newer one is.
+        ("0.2.1", "0.2.1.k", false), ("0.2.2", "0.2.1.k", true), ("0.2.1", "0.2.1.k.01", false),
     ])
     func compare(candidate: String, current: String, newer: Bool) {
         #expect(UpdateChecker.isNewer(candidate, than: current) == newer)

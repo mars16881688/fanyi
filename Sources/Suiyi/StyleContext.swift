@@ -29,7 +29,11 @@ enum StyleContext {
         for (name, url, limit) in files {
             guard (try? AgentIntegration.validateUserFile(url)) != nil,
                   let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            let cleaned = (name == profileSourceName ? raw : AgentIntegration.strippingBlock(raw)).trimmed
+            // Our own marker block is dropped from agent files; lines that look like secrets are
+            // dropped from every source, including the (model-written) profile (0.2.1.k).
+            let source = name == profileSourceName ? raw : AgentIntegration.strippingBlock(raw)
+            let cleaned = source.components(separatedBy: .newlines)
+                .filter { !SensitiveGuard.looksSensitive($0) }.joined(separator: "\n").trimmed
             guard !cleaned.isEmpty else { continue }
             let heading = "\n## 来源：\(name)\n"
             let remaining = 10_000 - text.count - heading.count
