@@ -15,6 +15,7 @@ final class SettingsModel: ObservableObject {
     @Published var saved = false
     @Published var showAnchor = true
     @Published var launchAtLogin = false
+    @Published var autoCheckUpdates = true
     @Published var excluded = ""
     @Published var status = ""
     @Published var testResult = ""
@@ -41,6 +42,7 @@ final class SettingsModel: ObservableObject {
         allowInCodeApps = AppSettings.allowInCodeApps
         mouseClipboardFallback = AppSettings.mouseClipboardFallback
         showAnchor = AppSettings.showAnchor
+        autoCheckUpdates = AppSettings.autoCheckUpdates
         excluded = AppSettings.excludedRaw
         launchAtLogin = SMAppService.mainApp.status == .enabled
         status = ""
@@ -88,6 +90,7 @@ final class SettingsModel: ObservableObject {
         AppSettings.allowInCodeApps = allowInCodeApps
         AppSettings.mouseClipboardFallback = mouseClipboardFallback
         AppSettings.showAnchor = showAnchor
+        AppSettings.autoCheckUpdates = autoCheckUpdates
         AppSettings.historyEnabled = historyEnabled
         AppSettings.useMyStyle = useMyStyle
         AppSettings.excludedRaw = excluded.trimmed
@@ -329,6 +332,15 @@ struct SettingsView: View {
                 Section(L("行为", "Behavior", "動作", "동작")) {
                     Toggle(L("划词后显示按钮", "Show button after selecting text", "テキスト選択後にボタンを表示", "텍스트 선택 후 버튼 표시"), isOn: $model.showAnchor)
                     Toggle(L("开机启动", "Launch at login", "ログイン時に起動", "로그인 시 실행"), isOn: $model.launchAtLogin)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(L("自动检查更新", "Check for updates automatically", "アップデートを自動確認", "업데이트 자동 확인"), isOn: $model.autoCheckUpdates)
+                        Text(L("每天读取一次官网的版本文件，有新版时提示，可一键更新；不发送任何个人数据。关闭后只在点「检查更新…」时检查。",
+                               "Reads the version file on the official site about once a day and offers one-click updates; no personal data is sent. When off, updates are checked only from “Check for Updates…”.",
+                               "1 日に 1 回公式サイトのバージョン情報を読み、新しいバージョンがあればワンクリックで更新できます。個人データは送信しません。オフにすると「アップデートを確認…」のときだけ確認します。",
+                               "하루에 한 번 공식 사이트의 버전 정보를 읽어 새 버전이 있으면 알리고 한 번에 업데이트할 수 있습니다. 개인 데이터는 보내지 않습니다. 끄면 「업데이트 확인…」을 누를 때만 확인합니다."))
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     VStack(alignment: .leading, spacing: 4) {
                         TextField(L("排除的应用", "Excluded apps", "除外するアプリ", "제외할 앱"), text: $model.excluded, prompt: Text(L("Bundle ID，用逗号分隔", "Bundle IDs, comma-separated", "Bundle ID（カンマ区切り）", "Bundle ID, 쉼표로 구분")))
                         Text(L("在这些应用中不会触发划词或快捷键（填写 Bundle ID，英文逗号分隔）。", "Selection and shortcuts are ignored in these apps (Bundle IDs, comma-separated).", "これらのアプリでは選択ボタンとショートカットが動作しません（Bundle ID、カンマ区切り）。", "이 앱들에서는 선택 버튼과 단축키가 동작하지 않습니다(Bundle ID, 쉼표로 구분)."))

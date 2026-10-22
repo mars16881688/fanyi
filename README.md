@@ -50,14 +50,18 @@ SUIYI_SIGN_IDENTITY="Developer ID Application: <名称> (<TEAMID>)" SUIYI_NOTARY
 
 使用 Developer ID 签名时，`build.sh` 会自动开启 hardened runtime 和安全时间戳；脚本随后提交公证、装订票据并用 `spctl` 校验。
 
-## 检查更新
+## 检查与自动更新
 
-菜单 **检查更新…** 只在点击时读取官网的 `latest.json`（版本号、下载地址、更新说明），有新版时提示前往下载。随译不会自动联网检查。发布新版：
+- 菜单 **检查更新…** 随时手动检查；设置 › 行为 › **自动检查更新**（默认开启）会在启动后和之后每天检查一次。检查只读取官网的 `latest.json`，不发送任何个人数据；关闭后只在手动点击时检查。
+- 有新版时提示 **立即更新**：下载该版本的 `Suiyi.zip`，先核对 `latest.json` 里的 SHA-256，再确认新 App 与当前 App 由同一证书签名、bundle id 相同，然后原地替换并重新打开。设置、钥匙串里的 API Key 和辅助功能授权都会保留。任一校验不通过就不安装，并提供「前往下载」。
+- 只接受 `https://github.com/mars16881688/fanyi-site/releases/download/…` 下的 zip。
 
-1. 改 `build.sh` 中的版本号，运行 `scripts/package.sh`。
-2. 在官网仓库 `mars16881688/fanyi-site` 创建 Release（tag `v<版本>`），上传压缩包，附件名固定为 `Suiyi.zip`：
+发布新版：
+
+1. 改 `build.sh` 中的版本号，运行 `scripts/package.sh`，记下打印的 SHA-256。
+2. 在官网仓库 `mars16881688/fanyi-site` 创建 Release（tag `v<版本>`），附件名固定为 `Suiyi.zip`：
    `cp dist/Suiyi-<版本>.zip /tmp/Suiyi.zip && gh release create v<版本> /tmp/Suiyi.zip --repo mars16881688/fanyi-site --title "随译 <版本>" --notes "…"`
-3. 更新官网仓库的 `latest.json`。
+3. 更新官网仓库的 `latest.json`：`version`、`url`（Release 页面）、`notes`，以及自动更新所需的 `download`（`https://github.com/mars16881688/fanyi-site/releases/download/v<版本>/Suiyi.zip`，必须是这个版本自己的地址）和 `sha256`（第 1 步的值）。缺少后两项时，App 只提示「前往下载」。
 
 官网下载按钮固定指向 `https://github.com/mars16881688/fanyi-site/releases/latest/download/Suiyi.zip`，发新版不用改链接。
 
