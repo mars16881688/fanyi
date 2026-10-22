@@ -15,8 +15,8 @@ enum Prompts {
         return words.count <= 4 && t.count <= 40
     }
 
-    /// Only the selected text, the app name, the window title and the scene reach the model (0.2.1.k):
-    /// no bundle ID and no text around the selection.
+    /// The selected text, the app name, the window title, the scene and non-sensitive nearby text reach
+    /// the model; the bundle ID does not (0.2.1.k).
     static func translate(text: String, direction: TranslationDirection, context: AppContext,
                           style: TranslationStyle, shortPhrase: Bool) -> [ChatMessage] {
         let target = direction.target.promptName
@@ -91,6 +91,12 @@ enum Prompts {
         lines.append("- Application: \(context.appName.trimmed.isEmpty ? "unknown" : context.appName)")
         if let title = context.windowTitle?.trimmed, !title.isEmpty {
             lines.append("- Window title: \(String(title.prefix(200)))")
+        }
+        if let surrounding = context.surrounding, !surrounding.isEmpty {
+            lines.append("- Nearby text (the selected passage sits inside it). Reference only:")
+            lines.append("<<<NEARBY_TEXT")
+            lines.append(surrounding)
+            lines.append("NEARBY_TEXT>>>")
         }
         return lines.joined(separator: "\n")
     }

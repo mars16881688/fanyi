@@ -10,11 +10,11 @@ enum StyleContext {
     private static var cached: (text: String, sources: [String]) = ("", [])
     private static var profileSourceName: String { L("随译画像", "Suiyi profile", "Suiyi プロファイル") }
 
-    /// 0.2.1.k.01: only the Suiyi profile is sent. ~/.codex/AGENTS.md and ~/.claude/CLAUDE.md hold
-    /// agent and operations instructions (accounts, hosts, paths) and must not reach the model.
     static func build() -> (text: String, sources: [String]) {
         let files: [(String, URL, Int)] = [
             (profileSourceName, HistoryStore.shared.folderURL.appendingPathComponent("profile.md"), 6000),
+            ("~/.codex/AGENTS.md", AgentIntegration.files[0].url, 3000),
+            ("~/.claude/CLAUDE.md", AgentIntegration.files[1].url, 3000)
         ]
         let current = files.map { file -> Stamp in
             guard (try? AgentIntegration.validateUserFile(file.1)) != nil else {
@@ -29,8 +29,10 @@ enum StyleContext {
         for (name, url, limit) in files {
             guard (try? AgentIntegration.validateUserFile(url)) != nil,
                   let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            // Lines that look like secrets are dropped even from the (model-written) profile.
-            let cleaned = raw.components(separatedBy: .newlines)
+            // Our own marker block is dropped from agent files; lines that look like secrets are
+            // dropped from every source, including the (model-written) profile (0.2.1.k).
+            let source = name == profileSourceName ? raw : AgentIntegration.strippingBlock(raw)
+            let cleaned = source.components(separatedBy: .newlines)
                 .filter { !SensitiveGuard.looksSensitive($0) }.joined(separator: "\n").trimmed
             guard !cleaned.isEmpty else { continue }
             let heading = "\n## 来源：\(name)\n"
