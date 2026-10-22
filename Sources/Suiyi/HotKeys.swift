@@ -3,7 +3,7 @@ import Carbon
 
 /// Carbon event handler. Defined at file scope (not inside a @MainActor
 /// method) so it is a plain, non-isolated C function pointer.
-private let fanyiHotKeyHandler: EventHandlerUPP = { (_: EventHandlerCallRef?, event: EventRef?, _: UnsafeMutableRawPointer?) -> OSStatus in
+private let suiyiHotKeyHandler: EventHandlerUPP = { (_: EventHandlerCallRef?, event: EventRef?, _: UnsafeMutableRawPointer?) -> OSStatus in
     guard let event = event else { return OSStatus(eventNotHandledErr) }
     var hotKeyID = EventHotKeyID()
     let err = GetEventParameter(
@@ -45,7 +45,7 @@ final class HotKeyCenter {
         if handlerRef != nil { return true }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                  eventKind: UInt32(kEventHotKeyPressed))
-        let status = InstallEventHandler(GetApplicationEventTarget(), fanyiHotKeyHandler, 1, &spec, nil, &handlerRef)
+        let status = InstallEventHandler(GetApplicationEventTarget(), suiyiHotKeyHandler, 1, &spec, nil, &handlerRef)
         return status == 0
     }
 

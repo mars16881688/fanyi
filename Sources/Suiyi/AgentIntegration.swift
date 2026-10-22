@@ -1,8 +1,11 @@
 import Foundation
 
 enum AgentIntegration {
-    static let begin = "<!-- fanyi:begin (由 Fanyi 自动添加，可在 Fanyi 设置里移除) -->"
-    static let end = "<!-- fanyi:end -->"
+    static let begin = "<!-- suiyi:begin (由随译自动添加，可在随译设置里移除) -->"
+    static let end = "<!-- suiyi:end -->"
+    // Blocks written before the rename to 随译; still recognised so they can be replaced or removed.
+    static let legacyBegin = "<!-- fanyi:begin (由 Fanyi 自动添加，可在 Fanyi 设置里移除) -->"
+    static let legacyEnd = "<!-- fanyi:end -->"
     // Resolve relative CODEX_HOME against the user's home, never the process cwd.
     private static var codexHome: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -27,13 +30,13 @@ enum AgentIntegration {
         let home = fm.homeDirectoryForCurrentUser.resolvingSymlinksInPath().standardizedFileURL
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
         guard resolved.path.hasPrefix(home.path + "/") else {
-            throw NSError(domain: "Fanyi.AgentIntegration", code: 1,
+            throw NSError(domain: "Suiyi.AgentIntegration", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。"])
         }
         var directory = resolved.deletingLastPathComponent()
         while directory.path != "/" {
             if fm.fileExists(atPath: directory.appendingPathComponent(".git").path) {
-                throw NSError(domain: "Fanyi.AgentIntegration", code: 2,
+                throw NSError(domain: "Suiyi.AgentIntegration", code: 2,
                               userInfo: [NSLocalizedDescriptionKey: "接入文件不能位于 Git 仓库内。请使用个人配置目录。"])
             }
             directory.deleteLastPathComponent()
@@ -44,13 +47,17 @@ enum AgentIntegration {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
             ("Codex", codexHome.appendingPathComponent("AGENTS.md"),
-             "## 我的个人风格（来自 Fanyi）\n\nWhen writing English or Chinese text on my behalf (messages, emails, PR descriptions, docs), first read `~/.fanyi/profile.md` if it exists and match my tone, length and wording habits described there. Do not quote it verbatim."),
+             "## 我的个人风格（来自随译）\n\nWhen writing English or Chinese text on my behalf (messages, emails, PR descriptions, docs), first read `~/.suiyi/profile.md` if it exists and match my tone, length and wording habits described there. Do not quote it verbatim."),
             ("Claude Code", home.appendingPathComponent(".claude/CLAUDE.md"),
-             "## 我的个人风格（来自 Fanyi）\n\n请参考以下 Fanyi 用户画像，在代我写作时匹配我的个人风格。\n\n@~/.fanyi/profile.md")
+             "## 我的个人风格（来自随译）\n\n请参考以下随译用户画像，在代我写作时匹配我的个人风格。\n\n@~/.suiyi/profile.md")
         ]
     }
 
     private static func range(in text: String) -> Range<String.Index>? {
+        range(in: text, begin: begin, end: end) ?? range(in: text, begin: legacyBegin, end: legacyEnd)
+    }
+
+    private static func range(in text: String, begin: String, end: String) -> Range<String.Index>? {
         guard let start = text.range(of: begin),
               let finish = text.range(of: end, range: start.upperBound..<text.endIndex) else { return nil }
         return start.lowerBound..<finish.upperBound
@@ -81,6 +88,19 @@ enum AgentIntegration {
             if let range = range(in: old) { updated.replaceSubrange(range, with: block) }
             else { updated += (old.isEmpty ? "" : "\n\n") + block }
             if updated != old { try LocalFile.write(updated, to: file.url) }
+        }
+    }
+
+    /// Rewrites pre-rename Fanyi blocks in place. Files without one are left untouched.
+    static func migrateLegacyBlocks() throws {
+        for file in files {
+            guard FileManager.default.fileExists(atPath: file.url.path) else { continue }
+            try validateUserFile(file.url)
+            let old = try String(contentsOf: file.url, encoding: .utf8)
+            guard let legacy = range(in: old, begin: legacyBegin, end: legacyEnd) else { continue }
+            var updated = old
+            updated.replaceSubrange(legacy, with: begin + "\n" + file.content + "\n" + end)
+            try LocalFile.write(updated, to: file.url)
         }
     }
 

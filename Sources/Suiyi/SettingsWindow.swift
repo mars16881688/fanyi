@@ -41,7 +41,7 @@ final class SettingsModel: ObservableObject {
         refreshLocal()
     }
 
-    static let historyExplanation = "默认关闭。开启后只保存在本机 ~/.fanyi/，不会上传；只有点「更新我的画像」或自动更新画像时，会把最近的记录发送到你自己配置的模型接口。"
+    static let historyExplanation = "默认关闭。开启后只保存在本机 ~/.suiyi/，不会上传；只有点「更新我的画像」或自动更新画像时，会把最近的记录发送到你自己配置的模型接口。"
 
     func setHistoryEnabled(_ enabled: Bool) {
         guard enabled, !UserDefaults.standard.bool(forKey: "historyConsentShown") else {
@@ -85,7 +85,7 @@ final class SettingsModel: ObservableObject {
             problems.append("开机启动设置失败：\(error.localizedDescription)")
         }
         if launchAtLogin && service.status == .requiresApproval {
-            problems.append("请在 系统设置 › 通用 › 登录项 中允许 Fanyi")
+            problems.append("请在 系统设置 › 通用 › 登录项 中允许随译")
         }
         launchAtLogin = service.status == .enabled || service.status == .requiresApproval
 
@@ -157,10 +157,10 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                Image(nsImage: FanyiStyle.symbol("character.bubble", description: "Fanyi", size: 24) ?? NSImage())
+                Image(nsImage: SuiyiStyle.symbol("character.bubble", description: "随译", size: 24) ?? NSImage())
                     .foregroundColor(Color(nsColor: .controlAccentColor))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Fanyi 设置").font(.title3.weight(.semibold))
+                    Text("随译设置").font(.title3.weight(.semibold))
                     Text("划词翻译 · 改写 · 回复").font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -178,7 +178,7 @@ struct SettingsView: View {
                     HStack(spacing: 8) {
                         Button { model.testConnection() } label: {
                             HStack(spacing: 5) {
-                                Image(nsImage: FanyiStyle.symbol("network", description: "测试连接") ?? NSImage())
+                                Image(nsImage: SuiyiStyle.symbol("network", description: "测试连接") ?? NSImage())
                                 Text("测试连接")
                             }
                         }
@@ -189,7 +189,7 @@ struct SettingsView: View {
                         if !model.testResult.isEmpty {
                             HStack(alignment: .top, spacing: 5) {
                                 if !model.testing {
-                                    Image(nsImage: FanyiStyle.symbol(
+                                    Image(nsImage: SuiyiStyle.symbol(
                                         model.testResult.hasPrefix("✅") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                                         description: model.testResult) ?? NSImage())
                                 }
@@ -241,7 +241,7 @@ struct SettingsView: View {
                 }
                 Section("我的风格") {
                     Toggle("回复时参考我的风格", isOn: $model.useMyStyle)
-                    Text(verbatim: "默认关闭。只读取当前用户自己的 ~/.fanyi/profile.md、~/.codex/AGENTS.md（设置了 $CODEX_HOME 时使用该目录）和 ~/.claude/CLAUDE.md；风格背景会随回复发送到你配置的模型接口。")
+                    Text(verbatim: "默认关闭。只读取当前用户自己的 ~/.suiyi/profile.md、~/.codex/AGENTS.md（设置了 $CODEX_HOME 时使用该目录）和 ~/.claude/CLAUDE.md；风格背景会随回复发送到你配置的模型接口。")
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(model.styleSources).font(.caption).foregroundColor(.secondary)
@@ -283,7 +283,7 @@ struct SettingsView: View {
             Divider()
             HStack(alignment: .center, spacing: 10) {
                 if !model.status.isEmpty {
-                    Image(nsImage: FanyiStyle.symbol(
+                    Image(nsImage: SuiyiStyle.symbol(
                         model.status == "已保存 ✓" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                         description: model.status) ?? NSImage())
                         .foregroundColor(Color(nsColor: model.status == "已保存 ✓" ? .systemGreen : .systemOrange))
@@ -319,7 +319,7 @@ final class SettingsWindowController {
         if window == nil {
             let host = NSHostingController(rootView: SettingsView(model: model))
             let newWindow = NSWindow(contentViewController: host)
-            newWindow.title = "Fanyi 设置"
+            newWindow.title = "随译设置"
             newWindow.styleMask = [.titled, .closable]
             newWindow.isReleasedWhenClosed = false
             newWindow.center()

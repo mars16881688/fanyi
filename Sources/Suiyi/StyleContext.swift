@@ -11,7 +11,7 @@ enum StyleContext {
 
     static func build() -> (text: String, sources: [String]) {
         let files: [(String, URL, Int)] = [
-            ("Fanyi 画像", HistoryStore.shared.folderURL.appendingPathComponent("profile.md"), 6000),
+            ("随译画像", HistoryStore.shared.folderURL.appendingPathComponent("profile.md"), 6000),
             ("~/.codex/AGENTS.md", AgentIntegration.files[0].url, 3000),
             ("~/.claude/CLAUDE.md", AgentIntegration.files[1].url, 3000)
         ]
@@ -28,7 +28,7 @@ enum StyleContext {
         for (name, url, limit) in files {
             guard (try? AgentIntegration.validateUserFile(url)) != nil,
                   let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            let cleaned = (name == "Fanyi 画像" ? raw : AgentIntegration.strippingBlock(raw)).trimmed
+            let cleaned = (name == "随译画像" ? raw : AgentIntegration.strippingBlock(raw)).trimmed
             guard !cleaned.isEmpty else { continue }
             let heading = "\n## 来源：\(name)\n"
             let remaining = 10_000 - text.count - heading.count

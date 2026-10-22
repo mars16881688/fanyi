@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Fanyi",
+    name: "Suiyi",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "Fanyi",
-            path: "Sources/Fanyi",
+            name: "Suiyi",
+            path: "Sources/Suiyi",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),
