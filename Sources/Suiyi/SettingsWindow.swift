@@ -28,6 +28,8 @@ final class SettingsModel: ObservableObject {
     @Published var confirmClear = false
 
     private var testTask: Task<Void, Never>?
+    /// 0.2.1.k.05: called after a save with no problems, so the window can close itself.
+    var onSaved: (() -> Void)?
 
     init() {}
 
@@ -113,6 +115,7 @@ final class SettingsModel: ObservableObject {
         outgoingLanguage = AppSettings.outgoingLanguage
         saved = problems.isEmpty
         status = saved ? L("已保存", "Saved", "保存しました") : problems.joined(separator: "\n")
+        if saved { onSaved?() }   // problems keep the window open so they can be read
     }
 
     func refreshLocal() {
@@ -379,6 +382,7 @@ final class SettingsWindowController {
 
     init() {
         model = SettingsModel()
+        model.onSaved = { [weak self] in self?.window?.close() }
     }
 
     func show() {
