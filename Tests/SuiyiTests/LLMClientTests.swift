@@ -44,15 +44,13 @@ struct ErrorMessageTests {
         #expect(text.count < 260)
     }
 
-    @Test("Network errors become readable Chinese")
+    @Test("Network errors get a dedicated message")
     func networkErrors() {
-        let offline = LLMError.userMessage(for: URLError(.notConnectedToInternet))
-        #expect(offline.contains("网络未连接"))
-        let timeout = LLMError.userMessage(for: URLError(.timedOut))
-        #expect(timeout.contains("超时"))
-        let host = LLMError.userMessage(for: URLError(.cannotFindHost))
-        #expect(host.contains("Base URL"))
-        #expect(LLMError.userMessage(for: LLMError.missingKey).contains("API Key"))
+        let generic = URLError(.badServerResponse)
+        for code in [URLError.Code.notConnectedToInternet, .timedOut, .cannotFindHost, .secureConnectionFailed] {
+            #expect(LLMError.userMessage(for: URLError(code)) != generic.localizedDescription)
+        }
+        #expect(LLMError.userMessage(for: generic) == generic.localizedDescription)
     }
 
     @Test("JSON error bodies yield error.message")

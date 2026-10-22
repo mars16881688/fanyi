@@ -10,7 +10,9 @@ enum AppSettings {
     private enum Key {
         static let baseURL = "baseURL"
         static let model = "model"
-        static let target = "targetLanguage"
+        static let legacyTarget = "targetLanguage"
+        static let myLanguage = "myLanguage"
+        static let outgoingLanguage = "outgoingLanguage"
         static let showAnchor = "showAnchorAfterSelection"
         static let excluded = "excludedBundleIDs"
         static let paused = "selectionPaused"
@@ -22,7 +24,6 @@ enum AppSettings {
         store.register(defaults: [
             Key.baseURL: defaultBaseURL,
             Key.model: defaultModel,
-            Key.target: TargetLanguage.auto.rawValue,
             Key.showAnchor: true,
             Key.excluded: defaultExcluded,
             Key.paused: false,
@@ -57,9 +58,49 @@ enum AppSettings {
         set { store.set(newValue.trimmed, forKey: Key.model) }
     }
 
-    static var targetLanguage: TargetLanguage {
-        get { TargetLanguage(rawValue: store.string(forKey: Key.target) ?? "") ?? .auto }
-        set { store.set(newValue.rawValue, forKey: Key.target) }
+    /// The language the user reads and writes in.
+    static var myLanguage: Language {
+        get { resolvedLanguages().mine }
+        set { store.set(newValue.code, forKey: Key.myLanguage) }
+    }
+
+    /// Where text already in the user's language is translated to.
+    static var outgoingLanguage: Language {
+        get { resolvedLanguages().outgoing }
+        set { store.set(newValue.code, forKey: Key.outgoingLanguage) }
+    }
+
+    private static func resolvedLanguages() -> (mine: Language, outgoing: Language) {
+        languages(mine: store.string(forKey: Key.myLanguage),
+                  outgoing: store.string(forKey: Key.outgoingLanguage),
+                  legacyTarget: store.string(forKey: Key.legacyTarget),
+                  preferred: Locale.preferredLanguages)
+    }
+
+    /// Stored choice first; otherwise derived from the pre-trilingual
+    /// "targetLanguage" setting; otherwise from the system language.
+    /// The outgoing language never equals the user's own language.
+    static func languages(mine storedMine: String?, outgoing storedOutgoing: String?,
+                          legacyTarget: String?, preferred: [String]) -> (mine: Language, outgoing: Language) {
+        func selectable(_ code: String?) -> Language? {
+            Language.selectable.first { $0.code == code }
+        }
+        let legacy: (Language, Language)? = switch legacyTarget {
+        case "auto", "simplifiedChinese": (.chinese, .english)
+        case "english": (.english, .chinese)
+        case "japanese": (.japanese, .english)
+        default: nil
+        }
+        let systemMine: Language = switch UILanguage.resolve(preferred) {
+        case .zh: .chinese
+        case .ja: .japanese
+        case .en: .english
+        }
+        let mine = selectable(storedMine) ?? legacy?.0 ?? systemMine
+        let fallbackOutgoing: Language = legacy.map { $0.0 == mine ? $0.1 : .english } ?? .english
+        var outgoing = selectable(storedOutgoing) ?? fallbackOutgoing
+        if outgoing == mine { outgoing = mine == .english ? .chinese : .english }
+        return (mine, outgoing)
     }
 
     static var showAnchor: Bool {

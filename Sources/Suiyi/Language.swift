@@ -1,46 +1,86 @@
 import Foundation
 import NaturalLanguage
 
-enum TargetLanguage: String, CaseIterable, Identifiable {
-    case auto
-    case simplifiedChinese
-    case english
-    case japanese
+/// A language text can be translated from or into, by ISO 639-1 code.
+/// Chinese means Simplified Chinese on output; Traditional input is "zh" too.
+struct Language: Hashable, Identifiable, Sendable {
+    let code: String
+    var id: String { code }
 
-    var id: String { rawValue }
+    static let chinese = Language(code: "zh")
+    static let english = Language(code: "en")
+    static let japanese = Language(code: "ja")
 
-    /// Shown in the Settings picker.
-    var menuTitle: String {
-        switch self {
-        case .auto: return "自动（中文 ↔ 英文）"
-        case .simplifiedChinese: return "简体中文"
-        case .english: return "English"
-        case .japanese: return "日本語"
-        }
-    }
+    /// Languages a user can choose as their own or outgoing language.
+    static let selectable: [Language] = [.chinese, .english, .japanese]
 
-    /// Used in the prompt.
+    /// Used in prompts.
     var promptName: String {
-        switch self {
-        case .auto, .simplifiedChinese: return "Simplified Chinese (简体中文)"
-        case .english: return "English"
-        case .japanese: return "Japanese (日本語)"
+        switch code {
+        case "zh": return "Simplified Chinese (简体中文)"
+        case "en": return "English"
+        case "ja": return "Japanese (日本語)"
+        default: return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
         }
     }
 
-    /// Used in the panel header.
+    /// Short tag for the card header, in the language's own script.
     var shortLabel: String {
-        switch self {
-        case .auto, .simplifiedChinese: return "中文"
-        case .english: return "EN"
-        case .japanese: return "日本語"
+        switch code {
+        case "zh": return "中文"
+        case "en": return "EN"
+        case "ja": return "日本語"
+        case "ko": return "한국어"
+        default: return code.uppercased()
+        }
+    }
+
+    /// Name in pickers, in the language's own script.
+    var nativeName: String {
+        switch code {
+        case "zh": return "中文"
+        case "en": return "English"
+        case "ja": return "日本語"
+        default: return Locale(identifier: code).localizedString(forLanguageCode: code) ?? shortLabel
+        }
+    }
+
+    /// Name in the interface language, e.g. 日文 / Japanese / 日本語.
+    var uiName: String {
+        switch (code, UILanguage.current) {
+        case ("zh", .zh): return "中文"
+        case ("en", .zh): return "英文"
+        case ("ja", .zh): return "日文"
+        case ("zh", .ja): return "中国語"
+        case ("en", .ja): return "英語"
+        case ("ja", .ja): return "日本語"
+        case (_, .zh): return Locale(identifier: "zh-Hans").localizedString(forLanguageCode: code) ?? shortLabel
+        case (_, .ja): return Locale(identifier: "ja").localizedString(forLanguageCode: code) ?? shortLabel
+        case (_, .en): return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? shortLabel
+        }
+    }
+
+    init(code: String) {
+        self.code = code.lowercased()
+    }
+
+    init?(_ nl: NLLanguage) {
+        switch nl {
+        case .undetermined: return nil
+        case .simplifiedChinese, .traditionalChinese: self = .chinese
+        default:
+            guard let base = nl.rawValue.split(separator: "-").first, !base.isEmpty else { return nil }
+            self.init(code: String(base))
         }
     }
 }
 
-struct TranslationDirection {
-    let sourceLabel: String
-    let target: TargetLanguage
+struct TranslationDirection: Equatable, Sendable {
+    /// nil when the source language could not be determined.
+    let source: Language?
+    let target: Language
+
+    var sourceLabel: String { source?.shortLabel ?? L("自动", "Auto", "自動") }
 }
 
 enum LanguageDetector {
@@ -84,51 +124,38 @@ enum LanguageDetector {
         let recognizer = NLLanguageRecognizer()
         recognizer.languageHints = [
             .english: 0.4, .simplifiedChinese: 0.3, .traditionalChinese: 0.05,
-            .japanese: 0.1, .korean: 0.05, .french: 0.03, .german: 0.03, .spanish: 0.04,
+            .japanese: 0.15, .korean: 0.03, .french: 0.02, .german: 0.02, .spanish: 0.03,
         ]
         recognizer.processString(text)
         return recognizer.dominantLanguage
     }
 
-    /// Picks the translation direction. Auto mode: Chinese → English,
-    /// everything else → Simplified Chinese. A fixed target that equals the
-    /// source language flips to the other side of the zh/en pair.
-    static func direction(for text: String, preference: TargetLanguage) -> TranslationDirection {
+    /// Kana always means Japanese; Han-heavy text that the recogniser cannot
+    /// place is treated as Chinese, Latin text as English.
+    static func detect(_ text: String) -> Language? {
         let counts = scriptCounts(text)
         let detected = dominantLanguage(text)
         let unknown = detected == nil || detected == .undetermined
 
-        var source: TargetLanguage?
-        var label = "自动"
-        if counts.kana > 0 || detected == .japanese {
-            source = .japanese
-            label = "日本語"
-        } else if detected == .simplifiedChinese || detected == .traditionalChinese {
-            source = .simplifiedChinese
-            label = "中文"
-        } else if unknown && counts.han > 0 && counts.han * 3 >= counts.latin {
-            source = .simplifiedChinese
-            label = "中文"
-        } else if detected == .english || (unknown && counts.latin > 0) {
-            source = .english
-            label = "EN"
-        } else if detected == .korean || counts.hangul > 0 {
-            label = "한국어"
-        } else if let lang = detected, lang != .undetermined {
-            label = lang.rawValue.uppercased()
-        }
+        if counts.kana > 0 || detected == .japanese { return .japanese }
+        if detected == .simplifiedChinese || detected == .traditionalChinese { return .chinese }
+        if unknown && counts.han > 0 && counts.han * 3 >= counts.latin { return .chinese }
+        if detected == .english || (unknown && counts.latin > 0) { return .english }
+        if counts.hangul > 0 { return Language(code: "ko") }
+        return detected.flatMap(Language.init)
+    }
 
-        let target: TargetLanguage
-        switch preference {
-        case .auto:
-            target = (source == .simplifiedChinese) ? .english : .simplifiedChinese
-        case .simplifiedChinese, .english, .japanese:
-            if source == preference {
-                target = (preference == .english) ? .simplifiedChinese : .english
-            } else {
-                target = preference
-            }
-        }
-        return TranslationDirection(sourceLabel: label, target: target)
+    /// Foreign text goes into the user's language; text already in the
+    /// user's language goes into their usual outgoing language.
+    static func direction(for text: String, mine: Language, outgoing: Language) -> TranslationDirection {
+        let source = detect(text)
+        return TranslationDirection(source: source, target: source == mine ? outgoing : mine)
+    }
+
+    /// A reply written in the user's language goes back to the sender's
+    /// language. Only offered when the original was foreign and identified.
+    static func replyDirection(for translation: TranslationDirection, mine: Language) -> TranslationDirection? {
+        guard translation.target == mine, let source = translation.source, source != mine else { return nil }
+        return TranslationDirection(source: mine, target: source)
     }
 }

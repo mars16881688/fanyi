@@ -30,6 +30,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>en</string>
+        <string>ja</string>
+    </array>
+    <key>LSHasLocalizedDisplayName</key>
+    <true/>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleExecutable</key>
@@ -60,7 +68,21 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# Localized app name and permission prompt (Finder, Dock tooltip, system dialogs).
+write_strings() {
+    mkdir -p "$APP/Contents/Resources/$1.lproj"
+    cat > "$APP/Contents/Resources/$1.lproj/InfoPlist.strings" <<STRINGS
+CFBundleName = "$2";
+CFBundleDisplayName = "$2";
+NSAppleEventsUsageDescription = "$3";
+STRINGS
+}
+write_strings zh-Hans "随译" "随译需要读取当前应用中选中的文字，以便翻译或改写。"
+write_strings en "Suiyi" "Suiyi reads the text you select in the current app so it can translate or rewrite it."
+write_strings ja "Suiyi" "Suiyi は翻訳や書き換えのため、現在のアプリで選択したテキストを読み取ります。"
+
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
+for f in "$APP"/Contents/Resources/*.lproj/InfoPlist.strings; do plutil -lint "$f" >/dev/null; done
 SIGN_IDENTITY="${SUIYI_SIGN_IDENTITY:-${SIGN_ID:-Suiyi Local Signing}}"
 SIGN_KEYCHAIN="${SUIYI_SIGN_KEYCHAIN:-$HOME/Library/Keychains/suiyi-signing.keychain-db}"
 SIGN_PW_SERVICE="suiyi-signing-keychain"

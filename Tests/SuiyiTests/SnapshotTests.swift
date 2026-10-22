@@ -3,14 +3,63 @@ import Foundation
 import Testing
 @testable import Suiyi
 
-/// Renders the floating UI in light and dark. Always checks that rendering
-/// works; writes PNGs when SUIYI_SNAPSHOT_DIR is set, for visual review.
-@Suite("UI snapshots")
+/// Everything that sets UILanguage.override lives here, serialized, so no
+/// other test observes a switched interface language.
+///
+/// Renders the floating UI in each interface language, light and dark.
+/// Always checks that rendering works; writes PNGs when SUIYI_SNAPSHOT_DIR is set.
+@Suite("Localized UI", .serialized)
 @MainActor
-struct SnapshotTests {
+struct LocalizedUITests {
+    private static let languages: [UILanguage] = [.zh, .en, .ja]
+
     init() {
+        _ = NSApplication.shared
         FloatingPanel.isHeadless = true
     }
+
+    private func withLanguage(_ language: UILanguage, _ body: () throws -> Void) rethrows {
+        UILanguage.override = language
+        defer { UILanguage.override = nil }
+        try body()
+    }
+
+    // MARK: Strings
+
+    @Test("Error messages are translated")
+    func errorStrings() {
+        withLanguage(.zh) {
+            #expect(LLMError.userMessage(for: URLError(.notConnectedToInternet)).contains("网络未连接"))
+            #expect(LLMError.hint(forStatus: 402)?.contains("余额") == true)
+        }
+        withLanguage(.en) {
+            #expect(LLMError.userMessage(for: URLError(.timedOut)).contains("timed out"))
+            #expect(LLMError.missingKey.errorDescription?.contains("API key") == true)
+        }
+        withLanguage(.ja) {
+            #expect(LLMError.userMessage(for: URLError(.cannotFindHost)).contains("Base URL"))
+            #expect(LLMError.hint(forStatus: 429)?.contains("リクエスト") == true)
+        }
+    }
+
+    @Test("Language names and rewrite titles follow the interface")
+    func names() {
+        withLanguage(.zh) {
+            #expect(Language.japanese.uiName == "日文")
+            #expect(RewriteParser.title(at: 0) == "更简洁")
+            #expect(TranslationDirection(source: nil, target: .chinese).sourceLabel == "自动")
+        }
+        withLanguage(.en) {
+            #expect(Language.chinese.uiName == "Chinese")
+            #expect(RewriteParser.title(at: 2) == "Casual")
+        }
+        withLanguage(.ja) {
+            #expect(Language.english.uiName == "英語")
+            #expect(RewriteParser.title(at: 1) == "丁寧")
+        }
+    }
+
+    // MARK: Snapshots
 
     private func render(_ view: NSView, appearance: NSAppearance.Name) throws -> NSImage {
         view.appearance = NSAppearance(named: appearance)
@@ -38,55 +87,66 @@ struct SnapshotTests {
         try png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(name).png"))
     }
 
-    private func check(_ view: NSView?, _ name: String) throws {
+    private func check(_ view: NSView?, _ name: String, _ language: UILanguage) throws {
         let view = try #require(view)
         #expect(view.bounds.width > 0 && view.bounds.height > 0)
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            try save(try render(view, appearance: appearance), "\(name)-\(suffix)")
+            try save(try render(view, appearance: appearance), "\(name)-\(language)-\(suffix)")
         }
     }
 
-    @Test("Anchor bubble and expanded choices")
-    func anchor() throws {
-        let anchor = AnchorController()
-        anchor.show(at: NSPoint(x: 400, y: 400))
-        try check(anchor.contentView, "anchor-bubble")
-        anchor.expand()
-        try check(anchor.contentView, "anchor-choices")
-        anchor.hide()
+    @Test("Anchor bubble and expanded choices", arguments: languages)
+    func anchor(language: UILanguage) throws {
+        try withLanguage(language) {
+            let anchor = AnchorController()
+            anchor.show(at: NSPoint(x: 400, y: 400))
+            try check(anchor.contentView, "anchor-bubble", language)
+            anchor.expand()
+            #expect((anchor.contentView?.bounds.width ?? 0) > 100)
+            try check(anchor.contentView, "anchor-choices", language)
+            anchor.hide()
+        }
     }
 
-    @Test("Translation card, collapsed and with the reply composer")
-    func translationCard() throws {
-        let card = ResultPanelController()
-        card.present(kind: .translate, header: "EN → 中文  ·  Google Chrome", editable: false,
-                     shortPhrase: false, at: NSPoint(x: 400, y: 700), offersReply: true)
-        card.append("从任何兼容 MCP 的 AI 客户端整理 iPhone 主屏幕。用自然语言移动应用和网页剪辑、创建文件夹、重新排列页面。")
-        card.finish()
-        try check(card.contentView, "card-translate")
-        card.expandReply(nil)
-        try check(card.contentView, "card-reply")
-        card.hide()
+    @Test("Translation card with a reply back to Japanese", arguments: languages)
+    func translationCard(language: UILanguage) throws {
+        try withLanguage(language) {
+            let card = ResultPanelController()
+            let direction = TranslationDirection(source: .japanese, target: .chinese)
+            card.present(kind: .translate, header: "\(direction.sourceLabel) → \(direction.target.shortLabel)  ·  Slack",
+                         editable: false, shortPhrase: false, at: NSPoint(x: 400, y: 700),
+                         reply: LanguageDetector.replyDirection(for: direction, mine: .chinese))
+            card.append("明天的会议几点开始？我想提前准备一下资料。")
+            card.finish()
+            try check(card.contentView, "card-translate", language)
+            card.expandReply(nil)
+            try check(card.contentView, "card-reply", language)
+            card.hide()
+        }
     }
 
-    @Test("Rewrite card with replace")
-    func rewriteCard() throws {
-        let card = ResultPanelController()
-        card.present(kind: .rewrite, header: "保持原语言  ·  备忘录", editable: true,
-                     shortPhrase: false, at: NSPoint(x: 400, y: 700))
-        card.append("[简洁] 这件事进展如何？\n[正式] 请问该事项目前进展如何？\n[口语] 那件事现在咋样了？")
-        card.finish()
-        try check(card.contentView, "card-rewrite")
-        card.hide()
+    @Test("Rewrite card with replace", arguments: languages)
+    func rewriteCard(language: UILanguage) throws {
+        try withLanguage(language) {
+            let card = ResultPanelController()
+            card.present(kind: .rewrite, header: L("保持原语言", "Same language", "同じ言語のまま") + "  ·  Notes",
+                         editable: true, shortPhrase: false, at: NSPoint(x: 400, y: 700))
+            card.append("[简洁] 这件事进展如何？\n[正式] 请问该事项目前进展如何？\n[口语] 那件事现在咋样了？")
+            card.finish()
+            try check(card.contentView, "card-rewrite", language)
+            card.hide()
+        }
     }
 
-    @Test("Error card")
-    func errorCard() throws {
-        let card = ResultPanelController()
-        card.present(kind: .translate, header: "EN → 中文  ·  Safari", editable: false,
-                     shortPhrase: false, at: NSPoint(x: 400, y: 700))
-        card.showError(LLMError.http(402, #"{"error":"Insufficient Balance"}"#).errorDescription ?? "")
-        try check(card.contentView, "card-error")
-        card.hide()
+    @Test("Error card", arguments: languages)
+    func errorCard(language: UILanguage) throws {
+        try withLanguage(language) {
+            let card = ResultPanelController()
+            card.present(kind: .translate, header: "EN → 中文  ·  Safari", editable: false,
+                         shortPhrase: false, at: NSPoint(x: 400, y: 700))
+            card.showError(LLMError.http(402, #"{"error":"Insufficient Balance"}"#).errorDescription ?? "")
+            try check(card.contentView, "card-error", language)
+            card.hide()
+        }
     }
 }
