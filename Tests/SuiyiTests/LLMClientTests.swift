@@ -44,15 +44,13 @@ struct ErrorMessageTests {
         #expect(text.count < 260)
     }
 
-    @Test("Network errors become readable Chinese")
+    @Test("Network errors get a dedicated message")
     func networkErrors() {
-        let offline = LLMError.userMessage(for: URLError(.notConnectedToInternet))
-        #expect(offline.contains("网络未连接"))
-        let timeout = LLMError.userMessage(for: URLError(.timedOut))
-        #expect(timeout.contains("超时"))
-        let host = LLMError.userMessage(for: URLError(.cannotFindHost))
-        #expect(host.contains("Base URL"))
-        #expect(LLMError.userMessage(for: LLMError.missingKey).contains("API Key"))
+        let generic = URLError(.badServerResponse)
+        for code in [URLError.Code.notConnectedToInternet, .timedOut, .cannotFindHost, .secureConnectionFailed] {
+            #expect(LLMError.userMessage(for: URLError(code)) != generic.localizedDescription)
+        }
+        #expect(LLMError.userMessage(for: generic) == generic.localizedDescription)
     }
 
     @Test("JSON error bodies yield error.message")
@@ -95,5 +93,30 @@ struct SSEParserTests {
     @Test("Non-SSE lines are kept for the plain-JSON fallback")
     func nonEvent() {
         #expect(SSEParser.parse(#"{"choices":[]}"#) == .nonEvent(#"{"choices":[]}"#))
+    }
+}
+
+@Suite("UpdateChecker")
+struct UpdateCheckerTests {
+    @Test("Version comparison", arguments: [
+        ("0.3.0", "0.2.0", true), ("0.10.0", "0.9.3", true), ("1.0", "1.0.0", false),
+        ("0.2.0", "0.2.0", false), ("0.1.9", "0.2.0", false), ("1.0.1", "1.0", true), (" 2.0 ", "1.9.9", true),
+    ])
+    func compare(candidate: String, current: String, newer: Bool) {
+        #expect(UpdateChecker.isNewer(candidate, than: current) == newer)
+    }
+
+    @Test("Feed format decodes, notes optional")
+    func decodes() throws {
+        let full = try JSONDecoder().decode(ReleaseInfo.self, from: Data(#"{"version":"0.2.0","url":"https://example.com","notes":{"zh":"新","en":"New"}}"#.utf8))
+        #expect(full.version == "0.2.0" && full.notes?["en"] == "New")
+        let bare = try JSONDecoder().decode(ReleaseInfo.self, from: Data(#"{"version":"1.0","url":"https://example.com"}"#.utf8))
+        #expect(bare.notes == nil)
+    }
+
+    @Test("Feed is HTTPS on the official site")
+    func feed() {
+        #expect(UpdateChecker.feedURL.scheme == "https")
+        #expect(UpdateChecker.feedURL.host == "mars16881688.github.io")
     }
 }

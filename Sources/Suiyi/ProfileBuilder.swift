@@ -18,18 +18,18 @@ final class ProfileBuilder: ObservableObject {
     func start() {
         guard !running else { return }
         guard let key = Keychain.apiKey(), !key.trimmed.isEmpty else {
-            status = "更新失败：请先保存 API Key。"
+            status = L("更新失败：请先保存 API Key。", "Update failed: save an API key first.", "更新に失敗しました：先に API キーを保存してください。")
             return
         }
         let entries = HistoryStore.shared.recentEntries(limit: 200)
-        guard !entries.isEmpty else { status = "暂无历史记录。"; return }
+        guard !entries.isEmpty else { status = L("暂无历史记录。", "No history yet.", "履歴がまだありません。"); return }
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
         var input = ""
         var used = 0
         for entry in entries {
             let fields: [(String, String?)] = [
                 ("模式", entry.mode), ("原文", entry.original), ("译文/改写", entry.translation),
-                ("中文回复", entry.replyZH), ("英文回复", entry.replyEN)
+                ("我写的回复", entry.replyZH), ("发出的回复", entry.replyEN)
             ]
             let block = fields.compactMap { name, value -> String? in
                 guard let value else { return nil }
@@ -54,7 +54,7 @@ final class ProfileBuilder: ObservableObject {
         最后一个部分给出 3–6 个简短且已匿名的表达示例。保持克制、简洁。
         """
         running = true
-        status = "正在更新画像…"
+        status = L("正在更新画像…", "Updating profile…", "プロファイルを更新中…")
         let output = Output()
         let historyInput = input
         task = Task { @MainActor [weak self] in
@@ -78,9 +78,9 @@ final class ProfileBuilder: ObservableObject {
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: self.profileURL.path)
                 let current = UserDefaults.standard.integer(forKey: "profileEntriesSinceUpdate")
                 UserDefaults.standard.set(max(0, current - counterAtStart), forKey: "profileEntriesSinceUpdate")
-                self.status = "画像已更新 ✓（\(used) 条记录）"
+                self.status = L("画像已更新 ✓（\(used) 条记录）", "Profile updated ✓ (\(used) entries)", "プロファイルを更新しました ✓（\(used) 件）")
             } catch {
-                self.status = "更新失败：\(error.localizedDescription)"
+                self.status = L("更新失败：", "Update failed: ", "更新に失敗しました：") + LLMError.userMessage(for: error)
             }
         }
     }

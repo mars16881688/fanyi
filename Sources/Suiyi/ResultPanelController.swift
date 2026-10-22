@@ -25,7 +25,9 @@ final class ResultPanelController: NSObject {
     private let footer: NSStackView
     private var bodyHeight: NSLayoutConstraint?
 
-    private var offersReply = false
+    /// Set when the card offers a reply: from the user's language back to the sender's.
+    private var reply: TranslationDirection?
+    private var offersReply: Bool { reply != nil }
     private var replyExpanded = false
     private var replyInput: ReplyTextView?
     private var replyOutput: NSTextField?
@@ -104,8 +106,8 @@ final class ResultPanelController: NSObject {
         modeIcon.setContentHuggingPriority(.required, for: .horizontal)
         closeButton.target = self
         closeButton.action = #selector(closeClicked(_:))
-        closeButton.toolTip = "关闭（Esc）"
-        closeButton.setAccessibilityLabel("关闭")
+        closeButton.toolTip = L("关闭（Esc）", "Close (Esc)", "閉じる（Esc）")
+        closeButton.setAccessibilityLabel(L("关闭", "Close", "閉じる"))
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
         let headerRow = NSStackView(views: [modeIcon, modeLabel, headerLabel, spinner, closeButton])
         headerRow.orientation = .horizontal
@@ -243,8 +245,12 @@ final class ResultPanelController: NSObject {
         if replyExpanded {
             addReplyComposer(to: stack, width: width)
         } else {
-            let start = makeButton("用中文回复", #selector(expandReply(_:)), symbol: "arrowshape.turn.up.left", small: true)
-            start.toolTip = "用中文写回复，随译译成英文"
+            let (mine, target) = replyNames
+            let start = makeButton(L("用\(mine)回复", "Reply in \(mine)", "\(mine)で返信"), #selector(expandReply(_:)),
+                                   symbol: "arrowshape.turn.up.left", small: true)
+            start.toolTip = L("用\(mine)写回复，随译译成\(target)",
+                              "Write in \(mine); Suiyi translates it into \(target)",
+                              "\(mine)で書くと、Suiyi が\(target)に翻訳します")
             stack.setCustomSpacing(12, after: stack.arrangedSubviews[0])
             stack.addArrangedSubview(start)
         }
@@ -267,7 +273,8 @@ final class ResultPanelController: NSObject {
 
     private func addReplyComposer(to stack: NSStackView, width: CGFloat) {
         stack.setCustomSpacing(16, after: stack.arrangedSubviews[0])
-        stack.addArrangedSubview(sectionLabel("我的中文回复"))
+        let (mine, target) = replyNames
+        stack.addArrangedSubview(sectionLabel(L("我的回复（\(mine)）", "My reply (\(mine))", "返信（\(mine)）")))
 
         let inputScroll = makeScrollView()
         inputScroll.translatesAutoresizingMaskIntoConstraints = false
@@ -287,6 +294,7 @@ final class ResultPanelController: NSObject {
         input.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         input.textContainer?.widthTracksTextView = true
         input.textContainer?.containerSize = NSSize(width: width - 24, height: CGFloat.greatestFiniteMagnitude)
+        input.placeholder = L("在这里用\(mine)写回复…", "Write your reply in \(mine)…", "\(mine)で返信を入力…")
         input.onSubmit = { [weak self] in self?.submitReply() }
         inputScroll.documentView = input
         let surface = RoundedSurfaceView()
@@ -302,9 +310,10 @@ final class ResultPanelController: NSObject {
         ])
         stack.addArrangedSubview(surface)
 
-        let generate = makeButton("生成英文", #selector(replyClicked(_:)), symbol: "arrow.turn.down.right",
+        let generate = makeButton(L("生成\(target)", "Translate to \(target)", "\(target)に翻訳"),
+                                  #selector(replyClicked(_:)), symbol: "arrow.turn.down.right",
                                   style: .primary, small: true)
-        generate.toolTip = "⌘↩ 生成英文；Return 换行"
+        generate.toolTip = L("⌘↩ 生成；Return 换行", "⌘↩ to translate, Return for a new line", "⌘↩ で翻訳、Return で改行")
         let hint = NSTextField(labelWithString: "⌘↩")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .tertiaryLabelColor
@@ -315,16 +324,19 @@ final class ResultPanelController: NSObject {
         stack.addArrangedSubview(actionRow)
         stack.setCustomSpacing(16, after: actionRow)
 
-        let copy = makeButton("复制英文", #selector(copyReply(_:)), small: true)
+        let copy = makeButton(L("复制\(target)", "Copy \(target)", "\(target)をコピー"), #selector(copyReply(_:)),
+                              symbol: "doc.on.doc", small: true)
         copy.isEnabled = false
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let heading = NSStackView(views: [sectionLabel("英文回复"), spacer, copy])
+        let heading = NSStackView(views: [sectionLabel(L("\(target)回复", "Reply in \(target)", "\(target)の返信")), spacer, copy])
         heading.orientation = .horizontal
         heading.alignment = .centerY
         heading.widthAnchor.constraint(equalToConstant: width).isActive = true
         stack.addArrangedSubview(heading)
-        let placeholder = "写好中文后按 ⌘↩，英文会出现在这里。"
+        let placeholder = L("写好后按 ⌘↩，\(target)会出现在这里。",
+                            "Press ⌘↩ when ready; the \(target) text appears here.",
+                            "書き終えたら ⌘↩。\(target)がここに表示されます。")
         let output = replyBodyLabel(placeholder, width: width)
         var emptyAttributes = bodyAttributes
         emptyAttributes[.foregroundColor] = NSColor.secondaryLabelColor
@@ -335,6 +347,11 @@ final class ResultPanelController: NSObject {
         replyOutput = output
         replyButton = generate
         replyCopyButton = copy
+    }
+
+    /// Interface names of (my language, the sender's language) for the reply composer.
+    private var replyNames: (mine: String, target: String) {
+        (reply?.source?.uiName ?? Language.chinese.uiName, reply?.target.uiName ?? Language.english.uiName)
     }
 
     @objc func expandReply(_ sender: NSButton?) {
@@ -355,7 +372,9 @@ final class ResultPanelController: NSObject {
         replyStreaming = true
         replyButton?.isEnabled = false
         replyCopyButton?.isEnabled = false
-        setReplyOutput("正在生成英文…", color: .secondaryLabelColor)
+        let target = replyNames.target
+        setReplyOutput(L("正在生成\(target)…", "Translating to \(target)…", "\(target)に翻訳中…"),
+                       color: .secondaryLabelColor)
         onReplyTranslate(input.string.trimmed)
     }
 
@@ -378,7 +397,7 @@ final class ResultPanelController: NSObject {
         replyButton?.isEnabled = true
         replyCopyButton?.isEnabled = !replyText.trimmed.isEmpty
         if replyText.trimmed.isEmpty {
-            setReplyOutput("服务没有返回任何内容。", color: .secondaryLabelColor)
+            setReplyOutput(LLMError.emptyResponse.errorDescription ?? "", color: .secondaryLabelColor)
         }
     }
 
@@ -412,9 +431,11 @@ final class ResultPanelController: NSObject {
         body.translatesAutoresizingMaskIntoConstraints = false
         body.widthAnchor.constraint(equalToConstant: width - 24).isActive = true
 
-        var buttons: [NSView] = [makeButton("复制", #selector(copyVariant(_:)), tag: index, small: true)]
+        var buttons: [NSView] = [makeButton(L("复制", "Copy", "コピー"), #selector(copyVariant(_:)),
+                                            symbol: "doc.on.doc", tag: index, small: true)]
         if editable {
-            buttons.append(makeButton("替换", #selector(replaceVariant(_:)), tag: index, small: true))
+            buttons.append(makeButton(L("替换", "Replace", "置き換え"), #selector(replaceVariant(_:)),
+                                      symbol: "arrow.turn.down.left", tag: index, small: true))
         }
         let row = NSStackView(views: buttons)
         row.orientation = .horizontal
@@ -446,8 +467,7 @@ final class ResultPanelController: NSObject {
 
     private func makeButton(_ title: String, _ action: Selector, symbol: String? = nil, tag: Int = 0,
                             style: GlassButton.Style = .secondary, small: Bool = false) -> GlassButton {
-        let defaultSymbol = title.hasPrefix("复制") ? "doc.on.doc" : title == "替换" ? "arrow.turn.down.left" : nil
-        let button = GlassButton(title: title, symbol: symbol ?? defaultSymbol, style: style,
+        let button = GlassButton(title: title, symbol: symbol, style: style,
                                  size: small ? .small : .regular, target: self, action: action)
         button.tag = tag
         button.setContentHuggingPriority(.required, for: .horizontal)
@@ -486,10 +506,12 @@ final class ResultPanelController: NSObject {
         if withActions {
             let canReplace = editable && !showingError
             // While the reply composer is open, 生成英文 is the primary action.
-            views.append(makeButton(offersReply ? "复制译文" : "复制", #selector(copyAll(_:)),
+            views.append(makeButton(offersReply ? L("复制译文", "Copy translation", "訳文をコピー") : L("复制", "Copy", "コピー"),
+                                    #selector(copyAll(_:)), symbol: "doc.on.doc",
                                     style: canReplace || replyExpanded ? .secondary : .primary))
             if canReplace {
-                views.append(makeButton("替换", #selector(replaceAll(_:)), style: .primary))
+                views.append(makeButton(L("替换", "Replace", "置き換え"), #selector(replaceAll(_:)),
+                                        symbol: "arrow.turn.down.left", style: .primary))
             }
         }
         footer.setViews(views, in: .trailing)
@@ -499,9 +521,9 @@ final class ResultPanelController: NSObject {
     // MARK: - Public API
 
     func present(kind: ActionKind, header: String, editable: Bool, shortPhrase: Bool, at point: NSPoint,
-                 offersReply: Bool = false) {
+                 reply: TranslationDirection? = nil) {
         noticeTask?.cancel()
-        self.offersReply = offersReply
+        self.reply = reply
         replyExpanded = false
         self.kind = kind
         self.editable = editable
@@ -512,14 +534,14 @@ final class ResultPanelController: NSObject {
         streaming = true
         modeLabel.textColor = .controlAccentColor
         modeIcon.contentTintColor = .controlAccentColor
-        modeLabel.stringValue = kind == .translate ? "翻译" : "改写"
+        modeLabel.stringValue = kind == .translate ? L("翻译", "Translate", "翻訳") : L("改写", "Rewrite", "書き換え")
         modeIcon.image = SuiyiStyle.symbol(kind == .translate ? "character.book.closed" : "pencil.line",
                                           description: modeLabel.stringValue)
         headerLabel.stringValue = header
         spinner.startAnimation(nil)
         installTextBody()
         textView?.textStorage?.setAttributedString(NSAttributedString(
-            string: kind == .translate ? "正在翻译…" : "正在改写…",
+            string: kind == .translate ? L("正在翻译…", "Translating…", "翻訳中…") : L("正在改写…", "Rewriting…", "書き換え中…"),
             attributes: [.font: NSFont.systemFont(ofSize: 14),
                          .foregroundColor: NSColor.secondaryLabelColor,
                          .paragraphStyle: SuiyiStyle.paragraph]))
@@ -577,7 +599,7 @@ final class ResultPanelController: NSObject {
 
     /// A short message that disappears by itself.
     func showNotice(_ message: String, at point: NSPoint) {
-        present(kind: .translate, header: "随译", editable: false, shortPhrase: false, at: point)
+        present(kind: .translate, header: L("随译", "Suiyi", "Suiyi"), editable: false, shortPhrase: false, at: point)
         showError(message)
         modeIcon.image = SuiyiStyle.symbol("info.circle.fill", description: message)
         modeIcon.contentTintColor = .secondaryLabelColor
@@ -653,7 +675,7 @@ final class ResultPanelController: NSObject {
     }
 
     private func flashCopied(_ button: NSButton) {
-        let done = "已复制"
+        let done = L("已复制", "Copied", "コピーしました")
         guard button.title != done else { return }
         let original = button.title
         button.title = done
@@ -692,6 +714,7 @@ final class ResultPanelController: NSObject {
 @MainActor
 private final class ReplyTextView: NSTextView {
     var onSubmit: (@MainActor () -> Void)?
+    var placeholder = ""
 
     override var needsPanelToBecomeKey: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -726,7 +749,7 @@ private final class ReplyTextView: NSTextView {
         super.draw(dirtyRect)
         guard string.isEmpty, !hasMarkedText() else { return }
         let padding = textContainer?.lineFragmentPadding ?? 5
-        ("在这里输入你的中文回复…" as NSString).draw(
+        (placeholder as NSString).draw(
             at: NSPoint(x: textContainerInset.width + padding, y: textContainerInset.height),
             withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 14),
                              .foregroundColor: NSColor.placeholderTextColor])
