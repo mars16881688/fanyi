@@ -5,7 +5,7 @@ extension String {
 }
 
 /// Borderless, non-activating floating panel shared by the anchor button and
-/// the result card. Clicking it never activates Fanyi, so the app the user is
+/// the result card. Clicking it never activates Suiyi, so the app the user is
 /// working in keeps focus.
 final class FloatingPanel: NSPanel {
     /// The anchor never needs key status; the result card does (so text in it

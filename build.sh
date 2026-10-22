@@ -1,15 +1,15 @@
 #!/bin/bash
-# Build Fanyi.app (release) with a stable local identity when available.
+# Build Suiyi.app (随译, release) with a stable local identity when available.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 swift build -c release
 BIN_DIR="$(swift build -c release --show-bin-path)"
 
-APP="build/Fanyi.app"
+APP="build/Suiyi.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/Fanyi" "$APP/Contents/MacOS/Fanyi"
+cp "$BIN_DIR/Suiyi" "$APP/Contents/MacOS/Suiyi"
 
 # App icon: Resources/AppIcon.png (1024x1024) -> AppIcon.icns
 ICONSET="build/AppIcon.iconset"
@@ -33,15 +33,15 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleExecutable</key>
-    <string>Fanyi</string>
+    <string>Suiyi</string>
     <key>CFBundleIdentifier</key>
-    <string>ai.mars.fanyi</string>
+    <string>ai.mars.suiyi</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Fanyi</string>
+    <string>随译</string>
     <key>CFBundleDisplayName</key>
-    <string>Fanyi</string>
+    <string>随译</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -55,20 +55,28 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Fanyi 需要读取当前应用中选中的文字，以便翻译或改写。</string>
+    <string>随译需要读取当前应用中选中的文字，以便翻译或改写。</string>
 </dict>
 </plist>
 PLIST
 
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
-SIGN_IDENTITY="${FANYI_SIGN_IDENTITY:-${SIGN_ID:-Fanyi Local Signing}}"
-SIGN_KEYCHAIN="${FANYI_SIGN_KEYCHAIN:-$HOME/Library/Keychains/fanyi-signing.keychain-db}"
+SIGN_IDENTITY="${SUIYI_SIGN_IDENTITY:-${SIGN_ID:-Suiyi Local Signing}}"
+SIGN_KEYCHAIN="${SUIYI_SIGN_KEYCHAIN:-$HOME/Library/Keychains/suiyi-signing.keychain-db}"
+SIGN_PW_SERVICE="suiyi-signing-keychain"
+# Reuse the identity created before the rename (scripts/create-signing-cert.sh as Fanyi).
+LEGACY_KEYCHAIN="$HOME/Library/Keychains/fanyi-signing.keychain-db"
+if [[ -z "${SUIYI_SIGN_IDENTITY:-}${SIGN_ID:-}${SUIYI_SIGN_KEYCHAIN:-}" && ! -f "$SIGN_KEYCHAIN" && -f "$LEGACY_KEYCHAIN" ]]; then
+    SIGN_IDENTITY="Fanyi Local Signing"
+    SIGN_KEYCHAIN="$LEGACY_KEYCHAIN"
+    SIGN_PW_SERVICE="fanyi-signing-keychain"
+fi
 SIGN_ARGS=(-s -)
 if [[ "$SIGN_IDENTITY" != "-" ]]; then
     HASH=""
     # 1) Dedicated keychain created by scripts/create-signing-cert.sh (no GUI prompts).
     if [[ -f "$SIGN_KEYCHAIN" ]]; then
-        PW="$(security find-generic-password -s fanyi-signing-keychain -a "$USER" -w 2>/dev/null || true)"
+        PW="$(security find-generic-password -s "$SIGN_PW_SERVICE" -a "$USER" -w 2>/dev/null || true)"
         [[ -n "$PW" ]] && security unlock-keychain -p "$PW" "$SIGN_KEYCHAIN" 2>/dev/null || true
         HASH="$(security find-identity -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null \
             | grep -F "\"$SIGN_IDENTITY\"" | head -1 | awk '{print $2}')"
@@ -89,6 +97,6 @@ fi
 echo "Signing identity: $SIGN_IDENTITY ${HASH:-}"
 # Certificate identities get codesign's default designated requirement
 # (identifier + certificate leaf hash), which does not change between builds.
-codesign --force --deep "${SIGN_ARGS[@]}" --identifier ai.mars.fanyi "$APP"
+codesign --force --deep "${SIGN_ARGS[@]}" --identifier ai.mars.suiyi "$APP"
 
 echo "Built: $(pwd)/$APP"

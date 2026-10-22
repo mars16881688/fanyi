@@ -1,6 +1,6 @@
 import Foundation
 
-/// Prompt construction. All prompts are original to Fanyi.
+/// Prompt construction. All prompts are original to Suiyi.
 enum Prompts {
     /// Roughly "a word or a short term": no line breaks and at most four words
     /// (or eight CJK characters).

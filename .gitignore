@@ -2,6 +2,7 @@
 build/
 .swiftpm/
 .fanyi/
+.suiyi/
 history.jsonl
 profile.md
 *.p12
