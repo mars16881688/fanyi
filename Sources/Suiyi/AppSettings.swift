@@ -77,10 +77,13 @@ enum AppSettings {
         set { store.set(newValue, forKey: Key.excluded) }
     }
 
-    static var excludedBundleIDs: Set<String> {
-        let parts = excludedRaw
-            .split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "\n" })
-            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+    static var excludedBundleIDs: Set<String> { parseExcluded(excludedRaw) }
+
+    /// Comma (half- or full-width), newline or whitespace separated, case-insensitive.
+    static func parseExcluded(_ raw: String) -> Set<String> {
+        let parts = raw
+            .split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace })
+            .map { $0.lowercased() }
             .filter { !$0.isEmpty }
         return Set(parts)
     }

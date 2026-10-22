@@ -19,10 +19,10 @@ final class AnchorController: NSObject {
     private let panel: FloatingPanel
     private let root: HoverView
     private let circle: NSView
-    private let bubble: FirstMouseButton
+    private let bubble: GlassButton
     private let choices: NSVisualEffectView
-    private let translateButton: FirstMouseButton
-    private let rewriteButton: FirstMouseButton
+    private let translateButton: GlassButton
+    private let rewriteButton: GlassButton
 
     private var expanded = false
     private var topLeft = NSPoint.zero
@@ -31,6 +31,8 @@ final class AnchorController: NSObject {
 
     var isVisible: Bool { panel.isVisible }
     var frame: NSRect { panel.frame }
+    /// For snapshot tests.
+    var contentView: NSView? { panel.contentView }
 
     override init() {
         let size: CGFloat = 30
@@ -38,10 +40,10 @@ final class AnchorController: NSObject {
         panel = FloatingPanel.make(size: square.size, allowsKey: false)
         root = HoverView(frame: square)
         circle = RoundedMaterialView(frame: square)
-        bubble = FirstMouseButton(frame: square)
+        bubble = GlassButton(title: "", symbol: "character.bubble", style: .plain, target: nil, action: nil)
         choices = RoundedMaterialView(frame: .zero)
-        translateButton = FirstMouseButton(title: "翻译", target: nil, action: nil)
-        rewriteButton = FirstMouseButton(title: "改写", target: nil, action: nil)
+        translateButton = GlassButton(title: "翻译", symbol: "character.book.closed", target: nil, action: nil)
+        rewriteButton = GlassButton(title: "改写", symbol: "pencil.line", target: nil, action: nil)
         super.init()
         configure()
     }
@@ -54,23 +56,16 @@ final class AnchorController: NSObject {
         (circle as? RoundedMaterialView)?.radius = size / 2
         root.addSubview(circle)
 
-        bubble.isBordered = false
-        bubble.title = ""
-        bubble.imagePosition = .imageOnly
-        bubble.imageScaling = .scaleProportionallyDown
-        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
-        if let symbol = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "随译") {
-            bubble.image = symbol.withSymbolConfiguration(config) ?? symbol
-        } else {
-            bubble.title = "译"
-        }
-        bubble.contentTintColor = .controlAccentColor
+        bubble.frame = NSRect(x: 0, y: 0, width: size, height: size)
+        bubble.tint = .controlAccentColor
+        bubble.iconPointSize = 15
+        bubble.setAccessibilityLabel("随译")
         bubble.toolTip = "随译：翻译 / 改写"
         bubble.target = self
         bubble.action = #selector(bubbleClicked(_:))
         circle.addSubview(bubble)
 
-        (choices as? RoundedMaterialView)?.radius = 18
+        (choices as? RoundedMaterialView)?.radius = 20
         choices.isHidden = true
         root.addSubview(choices)
 
@@ -78,16 +73,8 @@ final class AnchorController: NSObject {
         translateButton.action = #selector(pickTranslate(_:))
         rewriteButton.target = self
         rewriteButton.action = #selector(pickRewrite(_:))
-        for (button, symbol) in [(translateButton, "character.book.closed"), (rewriteButton, "pencil.line")] {
-            button.bezelStyle = .inline
-            button.font = .systemFont(ofSize: 12, weight: .medium)
-            button.image = SuiyiStyle.symbol(symbol, description: button.title)
-            button.imagePosition = .imageLeading
-            button.imageHugsTitle = true
-            button.contentTintColor = .labelColor
-            button.wantsLayer = true
-            button.layer?.cornerRadius = 12
-        }
+        translateButton.toolTip = "翻译（⌥⌘T）"
+        rewriteButton.toolTip = "改写（⌥⌘R）"
         choices.addSubview(translateButton)
         choices.addSubview(rewriteButton)
 
@@ -136,18 +123,16 @@ final class AnchorController: NSObject {
         panel.invalidateShadow()
     }
 
-    private func expand() {
+    func expand() {
         guard !expanded, panel.isVisible else { return }
         expanded = true
         hoverTask?.cancel()
         hideTask?.cancel()
 
-        translateButton.sizeToFit()
-        rewriteButton.sizeToFit()
         let pad: CGFloat = 5
-        let height = max(26, max(translateButton.frame.height, rewriteButton.frame.height))
-        let w1 = max(72, translateButton.frame.width)
-        let w2 = max(72, rewriteButton.frame.width)
+        let height = GlassButton.Size.regular.height
+        let w1 = max(76, translateButton.intrinsicContentSize.width)
+        let w2 = max(76, rewriteButton.intrinsicContentSize.width)
         let size = NSSize(width: pad * 3 + w1 + w2, height: height + pad * 2)
         translateButton.frame = NSRect(x: pad, y: pad, width: w1, height: height)
         rewriteButton.frame = NSRect(x: pad * 2 + w1, y: pad, width: w2, height: height)

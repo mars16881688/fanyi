@@ -140,7 +140,7 @@ final class SettingsModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                message = "❌ \(error.localizedDescription)"
+                message = "❌ \(LLMError.userMessage(for: error))"
             }
             guard let self else { return }
             self.testResult = message

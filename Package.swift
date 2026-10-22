@@ -18,6 +18,11 @@ let package = Package(
                 .linkedFramework("SwiftUI"),
             ]
         ),
+        .testTarget(
+            name: "SuiyiTests",
+            dependencies: ["Suiyi"],
+            path: "Tests/SuiyiTests"
+        ),
     ],
     swiftLanguageVersions: [.v5]
 )
