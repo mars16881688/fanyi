@@ -52,7 +52,14 @@ SUIYI_SIGN_IDENTITY="Developer ID Application: <名称> (<TEAMID>)" SUIYI_NOTARY
 
 ## 检查更新
 
-菜单 **检查更新…** 只在点击时读取官网的 `latest.json`（版本号、下载地址、更新说明），有新版时提示前往下载。随译不会自动联网检查。发布新版：改 `build.sh` 中的版本号，运行 `scripts/package.sh`，再更新官网仓库的 `latest.json`。
+菜单 **检查更新…** 只在点击时读取官网的 `latest.json`（版本号、下载地址、更新说明），有新版时提示前往下载。随译不会自动联网检查。发布新版：
+
+1. 改 `build.sh` 中的版本号，运行 `scripts/package.sh`。
+2. 在官网仓库 `mars16881688/fanyi-site` 创建 Release（tag `v<版本>`），上传压缩包，附件名固定为 `Suiyi.zip`：
+   `cp dist/Suiyi-<版本>.zip /tmp/Suiyi.zip && gh release create v<版本> /tmp/Suiyi.zip --repo mars16881688/fanyi-site --title "随译 <版本>" --notes "…"`
+3. 更新官网仓库的 `latest.json`。
+
+官网下载按钮固定指向 `https://github.com/mars16881688/fanyi-site/releases/latest/download/Suiyi.zip`，发新版不用改链接。
 
 ## 图标
 
