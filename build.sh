@@ -27,6 +27,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
         <string>zh-Hans</string>
         <string>en</string>
         <string>ja</string>
+        <string>ko</string>
     </array>
     <key>LSHasLocalizedDisplayName</key>
     <true/>
@@ -45,9 +46,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.3</string>
+    <string>0.2.4</string>
     <key>CFBundleVersion</key>
-    <string>5</string>
+    <string>6</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
@@ -72,6 +73,7 @@ STRINGS
 write_strings zh-Hans "随译" "随译需要读取当前应用中选中的文字，以便翻译或改写。"
 write_strings en "Suiyi" "Suiyi reads the text you select in the current app so it can translate or rewrite it."
 write_strings ja "Suiyi" "Suiyi は翻訳や書き換えのため、現在のアプリで選択したテキストを読み取ります。"
+write_strings ko "Suiyi" "Suiyi는 번역하거나 다시 쓰기 위해 현재 앱에서 선택한 텍스트를 읽습니다."
 
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 for f in "$APP"/Contents/Resources/*.lproj/InfoPlist.strings; do plutil -lint "$f" >/dev/null; done

@@ -8,7 +8,7 @@ enum StyleContext {
     }
     private static var stamps: [Stamp] = []
     private static var cached: (text: String, sources: [String]) = ("", [])
-    private static var profileSourceName: String { L("随译画像", "Suiyi profile", "Suiyi プロファイル") }
+    private static var profileSourceName: String { L("随译画像", "Suiyi profile", "Suiyi プロファイル", "Suiyi 프로필") }
 
     static func build() -> (text: String, sources: [String]) {
         let files: [(String, URL, Int)] = [

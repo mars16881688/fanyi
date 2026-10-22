@@ -11,7 +11,7 @@ import Testing
 @Suite("Localized UI", .serialized)
 @MainActor
 struct LocalizedUITests {
-    private static let languages: [UILanguage] = [.zh, .en, .ja]
+    private static let languages: [UILanguage] = [.zh, .en, .ja, .ko]
 
     init() {
         _ = NSApplication.shared
@@ -36,6 +36,10 @@ struct LocalizedUITests {
             #expect(LLMError.userMessage(for: URLError(.timedOut)).contains("timed out"))
             #expect(LLMError.missingKey.errorDescription?.contains("API key") == true)
         }
+        withLanguage(.ko) {
+            #expect(LLMError.userMessage(for: URLError(.notConnectedToInternet)).contains("오프라인"))
+            #expect(LLMError.hint(forStatus: 402)?.contains("잔액") == true)
+        }
         withLanguage(.ja) {
             #expect(LLMError.userMessage(for: URLError(.cannotFindHost)).contains("Base URL"))
             #expect(LLMError.hint(forStatus: 429)?.contains("リクエスト") == true)
@@ -52,6 +56,15 @@ struct LocalizedUITests {
         withLanguage(.en) {
             #expect(Language.chinese.uiName == "Chinese")
             #expect(RewriteParser.title(at: 2) == "Casual")
+        }
+        withLanguage(.ko) {
+            #expect(Language.japanese.uiName == "일본어")
+            #expect(Language.korean.uiName == "한국어")
+            #expect(RewriteParser.title(at: 0) == "간결하게")
+            #expect(TranslationDirection(source: nil, target: .korean).sourceLabel == "자동")
+        }
+        withLanguage(.zh) {
+            #expect(Language.korean.uiName == "韩文")
         }
         withLanguage(.ja) {
             #expect(Language.english.uiName == "英語")
@@ -198,7 +211,7 @@ struct LocalizedUITests {
     func rewriteCard(language: UILanguage) throws {
         try withLanguage(language) {
             let card = ResultPanelController()
-            card.present(kind: .rewrite, header: L("保持原语言", "Same language", "同じ言語のまま") + "  ·  Notes",
+            card.present(kind: .rewrite, header: L("保持原语言", "Same language", "同じ言語のまま", "같은 언어 유지") + "  ·  Notes",
                          editable: true, shortPhrase: false, at: NSPoint(x: 400, y: 700))
             card.append("[简洁] 这件事进展如何？\n[正式] 请问该事项目前进展如何？\n[口语] 那件事现在咋样了？")
             card.finish()
