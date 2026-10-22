@@ -1,41 +1,117 @@
 import AppKit
 
-/// Layer colors must be resolved again when the system appearance changes.
+/// Frosted-glass surface: behind-window vibrant blur, continuous rounded
+/// corners (via maskImage so the blur itself is clipped), a bright hairline
+/// inner border and a soft top highlight. Adapts to light and dark.
 @MainActor
 final class RoundedMaterialView: NSVisualEffectView {
-    var radius: CGFloat = 14
+    var radius: CGFloat = 20 { didSet { applyShape() } }
+
+    private let rim = CAShapeLayer()
+    private let tint = CALayer()
+    private let sheen = CAGradientLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configure()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configure()
+    }
+
+    private func configure() {
+        material = .hudWindow
+        blendingMode = .behindWindow
+        state = .active
+        wantsLayer = true
+        rim.fillColor = nil
+        rim.lineWidth = 1
+        sheen.startPoint = CGPoint(x: 0.5, y: 1)
+        sheen.endPoint = CGPoint(x: 0.5, y: 0)
+        layer?.addSublayer(tint)
+        layer?.addSublayer(sheen)
+        layer?.addSublayer(rim)
+        applyShape()
+    }
+
+    private var isDark: Bool {
+        effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    override func layout() {
+        super.layout()
+        applyShape()
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateBorder()
+        applyShape()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        updateBorder()
+        applyShape()
     }
 
-    private func updateBorder() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.cornerRadius = radius
-            layer?.borderWidth = 0.5
-            layer?.borderColor = NSColor.separatorColor.cgColor
+    private func applyShape() {
+        let r = min(radius, min(bounds.width, bounds.height) / 2)
+        maskImage = Self.mask(radius: r)
+        guard let layer else { return }
+        layer.cornerRadius = r
+        if #available(macOS 11.0, *) { layer.cornerCurve = .continuous }
+        layer.masksToBounds = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let inset = bounds.insetBy(dx: 0.5, dy: 0.5)
+        rim.frame = bounds
+        rim.path = CGPath(roundedRect: inset, cornerWidth: max(0, r - 0.5), cornerHeight: max(0, r - 0.5), transform: nil)
+        rim.strokeColor = NSColor.white.withAlphaComponent(isDark ? 0.16 : 0.55).cgColor
+        // A faint base tint keeps text readable over saturated backdrops.
+        tint.frame = bounds
+        tint.backgroundColor = (isDark ? NSColor.black.withAlphaComponent(0.18)
+                                       : NSColor.white.withAlphaComponent(0.28)).cgColor
+        sheen.frame = bounds
+        sheen.colors = [NSColor.white.withAlphaComponent(isDark ? 0.07 : 0.22).cgColor,
+                        NSColor.white.withAlphaComponent(0).cgColor]
+        sheen.locations = [0, 0.45]
+        CATransaction.commit()
+    }
+
+    /// Resizable rounded-rect mask; clips the behind-window blur itself.
+    private static func mask(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
         }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 }
 
+/// Very light translucent inner card that sits on the glass.
 @MainActor
 final class RoundedSurfaceView: NSView {
-    var radius: CGFloat = 10
+    var radius: CGFloat = 12
     var accent = false
 
+    override var allowsVibrancy: Bool { false }
+
     override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: radius, yRadius: radius)
-        (accent ? NSColor.controlAccentColor : NSColor.quaternaryLabelColor)
-            .withAlphaComponent(accent ? 1 : 0.07).setFill()
+        if accent {
+            NSColor.controlAccentColor.setFill()
+        } else {
+            (dark ? NSColor.white.withAlphaComponent(0.07) : NSColor.white.withAlphaComponent(0.38)).setFill()
+        }
         path.fill()
-        NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+        (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.white.withAlphaComponent(0.7)).setStroke()
         path.lineWidth = 0.5
         path.stroke()
     }
