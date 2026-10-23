@@ -24,23 +24,11 @@ final class ProfileBuilder: ObservableObject {
         let entries = HistoryStore.shared.recentEntries(limit: 200)
         guard !entries.isEmpty else { status = L("暂无历史记录。", "No history yet.", "履歴がまだありません。"); return }
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
-        var input = ""
-        var used = 0
-        for entry in entries {
-            let fields: [(String, String?)] = [
-                ("模式", entry.mode), ("原文", entry.original), ("译文/改写", entry.translation),
-                ("我写的回复", entry.replyZH), ("发出的回复", entry.replyEN)
-            ]
-            // 0.2.1.k.01: entries that look like they hold a secret (including ones written before
-            // this version) are never sent to the model.
-            if fields.dropFirst().contains(where: { $0.1.map(SensitiveGuard.looksSensitive) ?? false }) { continue }
-            let block = fields.compactMap { name, value -> String? in
-                guard let value else { return nil }
-                return "\(name)：\(String(value.prefix(400)))"
-            }.joined(separator: "\n") + "\n\n"
-            guard input.count + block.count <= 24_000 else { break }
-            input += block
-            used += 1
+        let (input, used) = Self.buildInput(entries)
+        guard used > 0 else {
+            status = L("没有可用的记录（像密码或密钥的记录不会发送）。", "No usable entries (entries that look like secrets are never sent).",
+                       "使用できる履歴がありません（パスワードやキーに見える履歴は送信しません）。")
+            return
         }
         let counterAtStart = UserDefaults.standard.integer(forKey: "profileEntriesSinceUpdate")
         let date = ISO8601DateFormatter().string(from: Date())
@@ -83,9 +71,36 @@ final class ProfileBuilder: ObservableObject {
                 UserDefaults.standard.set(max(0, current - counterAtStart), forKey: "profileEntriesSinceUpdate")
                 self.status = L("画像已更新 ✓（\(used) 条记录）", "Profile updated ✓ (\(used) entries)", "プロファイルを更新しました ✓（\(used) 件）")
             } catch {
+                // 0.2.1.k.11: a failed run also consumes the counter, so a persistent failure (402,
+                // 400 for a too-long prompt, a small local model) is not retried after every entry.
+                UserDefaults.standard.set(0, forKey: "profileEntriesSinceUpdate")
                 self.status = L("更新失败：", "Update failed: ", "更新に失敗しました：") + LLMError.userMessage(for: error)
             }
         }
+    }
+
+    /// The history as sent to the model: the first 400 characters of each field, at most 24,000
+    /// characters in all. 0.2.1.k.11: the secret check runs on exactly the text that is sent.
+    nonisolated static func buildInput(_ entries: [HistoryEntry]) -> (input: String, used: Int) {
+        var input = ""
+        var used = 0
+        for entry in entries {
+            let fields: [(String, String?)] = [
+                ("模式", entry.mode), ("原文", entry.original), ("译文/改写", entry.translation),
+                ("我写的回复", entry.replyZH), ("发出的回复", entry.replyEN)
+            ].map { ($0.0, $0.1.map { String($0.prefix(400)) }) }
+            // 0.2.1.k.01: entries that look like they hold a secret (including ones written before
+            // this version) are never sent to the model.
+            if fields.dropFirst().contains(where: { $0.1.map(SensitiveGuard.looksSensitive) ?? false }) { continue }
+            let block = fields.compactMap { name, value -> String? in
+                guard let value else { return nil }
+                return "\(name)：\(value)"
+            }.joined(separator: "\n") + "\n\n"
+            guard input.count + block.count <= 24_000 else { break }
+            input += block
+            used += 1
+        }
+        return (input, used)
     }
 
     private static func manualRange(_ text: String) -> Range<String.Index>? {
@@ -102,11 +117,19 @@ final class ProfileBuilder: ObservableObject {
         return String(text[..<range.lowerBound])
     }
 
+    /// 0.2.1.k.11: the automatic rebuild runs only when something reads the profile (My style on),
+    /// and history recorded against one endpoint is never sent to another one automatically.
     func didLogEntry() {
         guard AppSettings.historyEnabled else { return }
         let defaults = UserDefaults.standard
+        let host = URL(string: AppSettings.baseURL)?.host ?? AppSettings.baseURL
+        if defaults.string(forKey: "profileEndpointHost") != host {
+            defaults.set(host, forKey: "profileEndpointHost")
+            defaults.set(0, forKey: "profileEntriesSinceUpdate")
+        }
         let count = defaults.integer(forKey: "profileEntriesSinceUpdate") + 1
         defaults.set(count, forKey: "profileEntriesSinceUpdate")
+        guard AppSettings.useMyStyle else { return }
         if count >= 30, let key = Keychain.apiKey(), !key.trimmed.isEmpty { start() }
     }
 }

@@ -8,6 +8,8 @@ final class ResultPanelController: NSObject {
     var onReplace: (@MainActor (String) -> Void)?
     var onReplyTranslate: (@MainActor (String) -> Void)?
     var onClose: (@MainActor () -> Void)?
+    /// 0.2.1.k.11: called after the card appears or goes (the global key monitor follows it).
+    var onVisibilityChange: (@MainActor () -> Void)?
     /// The 翻译 / 改写 tabs ask for the same selection in the other mode.
     var onSwitchKind: (@MainActor (ActionKind) -> Void)?
 
@@ -62,6 +64,9 @@ final class ResultPanelController: NSObject {
     private var topLeft = NSPoint.zero
     private var reference = NSPoint.zero
     private var noticeTask: Task<Void, Never>?
+    /// 0.2.1.k.11: streamed deltas are laid out at most ~30 times a second, not once per token.
+    private var relayoutScheduled = false
+    private var replyOutputDirty = false
 
     var isVisible: Bool { panel.isVisible }
     var frame: NSRect { panel.frame }
@@ -438,11 +443,13 @@ final class ResultPanelController: NSObject {
     func appendReply(_ delta: String) {
         guard replyStreaming, replyOutput != nil else { return }
         replyText += delta
-        setReplyOutput(replyText, color: .labelColor)
+        replyOutputDirty = true
+        scheduleRelayout()
     }
 
     func finishReply() {
         guard replyStreaming else { return }
+        replyOutputDirty = false
         replyStreaming = false
         replyButton?.isEnabled = true
         replyCopyButton?.isEnabled = !replyText.trimmed.isEmpty
@@ -608,6 +615,7 @@ final class ResultPanelController: NSObject {
         topLeft = keepPosition ? point : NSPoint(x: point.x + 4, y: point.y - 12)
         relayout(keepPosition: false)
         panel.orderFrontRegardless()
+        onVisibilityChange?()
     }
 
     func append(_ delta: String) {
@@ -615,7 +623,24 @@ final class ResultPanelController: NSObject {
         if rawText.isEmpty { tv.textStorage?.setAttributedString(NSAttributedString(string: "")) }
         rawText += delta
         tv.textStorage?.append(NSAttributedString(string: delta, attributes: bodyAttributes))
-        relayout(keepPosition: true)
+        scheduleRelayout()
+    }
+
+    private func scheduleRelayout() {
+        guard !relayoutScheduled else { return }
+        relayoutScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 33_000_000)
+            guard let self else { return }
+            self.relayoutScheduled = false
+            guard self.panel.isVisible else { return }
+            if self.replyOutputDirty {
+                self.replyOutputDirty = false
+                self.setReplyOutput(self.replyText, color: .labelColor)   // relayouts
+            } else {
+                self.relayout(keepPosition: true)
+            }
+        }
     }
 
     func finish() {
@@ -677,7 +702,9 @@ final class ResultPanelController: NSObject {
         streaming = false
         replyStreaming = false
         spinner.stopAnimation(nil)
+        let wasVisible = panel.isVisible
         panel.orderOut(nil)
+        if wasVisible { onVisibilityChange?() }
     }
 
     // MARK: - Layout
@@ -710,8 +737,11 @@ final class ResultPanelController: NSObject {
             topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
         }
         let rect = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
-        panel.setFrame(ScreenGeometry.fit(rect, reference: reference), display: true)
-        panel.invalidateShadow()
+        let fitted = ScreenGeometry.fit(rect, reference: reference)
+        if fitted != panel.frame {   // a window resize and a shadow recomputation only when something moved
+            panel.setFrame(fitted, display: true)
+            panel.invalidateShadow()
+        }
 
         if streaming, wanted > maxBody, let tv = textView {
             let end = (tv.string as NSString).length

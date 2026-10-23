@@ -29,10 +29,22 @@ enum UpdateChecker {
         return false
     }
 
+    /// A Kimi build ("0.2.1.k.12"): the upstream feed can only announce upstream versions, which lack
+    /// the k.* changes, so they are reported but never offered for download.
+    static func isKimiVersion(_ version: String) -> Bool {
+        version.split(separator: ".").contains { $0.lowercased() == "k" }
+    }
+
+    /// Only the upstream author's own hosts may be opened.
+    static func isTrustedDownload(_ url: URL) -> Bool {
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        return host == "github.com" || host == "mars16881688.github.io"
+    }
+
     static func fetchLatest() async throws -> ReleaseInfo {
         var request = URLRequest(url: feedURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request, delegate: NoRedirects.shared)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
@@ -45,8 +57,17 @@ enum UpdateChecker {
             let alert = NSAlert()
             do {
                 let latest = try await fetchLatest()
-                if isNewer(latest.version, than: currentVersion), let url = URL(string: latest.url),
-                   url.scheme == "https" {
+                if isNewer(latest.version, than: currentVersion), isKimiVersion(currentVersion) {
+                    alert.messageText = L("上游发布了 \(latest.version)", "Upstream released \(latest.version)",
+                                          "上流が \(latest.version) を公開しました")
+                    alert.informativeText = L("这是 Mars 的上游版本，不含 Kimi 版的改动（内容收窄、敏感内容过滤、点按钮才读取等）。当前 Kimi 版 \(currentVersion)；Kimi 版的更新请到发布页下载。",
+                                              "This is the upstream build; it lacks the Kimi changes (narrower context, sensitive-content guard, read on click). You have Kimi build \(currentVersion); Kimi updates are on the release page.",
+                                              "上流（Mars）のビルドで、Kimi 版の変更は含まれません。現在の Kimi 版は \(currentVersion) です。Kimi 版の更新は配布ページから。")
+                    NSApp.activate(ignoringOtherApps: true)
+                    alert.runModal()
+                    return
+                }
+                if isNewer(latest.version, than: currentVersion), let url = URL(string: latest.url), isTrustedDownload(url) {
                     alert.messageText = L("有新版本 \(latest.version)", "Version \(latest.version) is available",
                                           "新しいバージョン \(latest.version) があります")
                     let note = latest.notes?[noteKey] ?? latest.notes?["en"] ?? ""

@@ -42,6 +42,10 @@ enum SceneKind: String {
     private static let browserApps: Set<String> = [
         "com.apple.safari", "com.google.chrome", "company.thebrowser.browser",
         "com.microsoft.edgemac", "com.brave.browser", "org.mozilla.firefox",
+        // 0.2.1.k.12: web-selection reads run only in browsers (and out-of-process web views).
+        "com.vivaldi.vivaldi", "com.operasoftware.opera", "org.chromium.chromium", "com.google.chrome.canary",
+        "com.kagi.kagimacos", "company.thebrowser.dia", "ai.perplexity.comet", "com.sigmaos.sigmaos",
+        "org.mozilla.firefoxdeveloperedition", "com.apple.safaritechnologypreview", "com.duckduckgo.macos.browser",
     ]
 
     static func forBundleID(_ bundleID: String?) -> SceneKind {
@@ -69,11 +73,14 @@ enum ContextCollector {
     /// is rejected without reading anything else. Never reads the text around the selection.
     /// A title that itself looks like a secret (e.g. a mail subject carrying a one-time code) is dropped.
     static func collect(for selection: CapturedSelection, windowTitle: String?) -> AppContext {
-        AppContext(
+        let scene = SceneKind.forBundleID(selection.bundleID)
+        return AppContext(
             appName: selection.appName,
             bundleID: selection.bundleID ?? "",
-            windowTitle: SensitiveGuard.sanitizedTitle(windowTitle),
-            scene: SceneKind.forBundleID(selection.bundleID)
+            // 0.2.1.k.12: in a chat app the title is the other person's name; it tells the model
+            // nothing the scene does not, so it stays on this Mac.
+            windowTitle: scene == .chat ? nil : SensitiveGuard.sanitizedTitle(windowTitle),
+            scene: scene
         )
     }
 
