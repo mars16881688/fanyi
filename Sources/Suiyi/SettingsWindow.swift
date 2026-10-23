@@ -68,7 +68,7 @@ final class SettingsModel: ObservableObject {
         }
         let alert = NSAlert()
         alert.messageText = L("开启记录历史？", "Turn on history?", "履歴を記録しますか？", "기록을 켤까요?")
-        alert.informativeText = Self.historyExplanation + L(" 开启后每新增 30 条记录会自动更新画像。设置需点「保存」生效。", " The profile updates automatically every 30 new entries. Click Save to apply.", " 30 件ごとにプロファイルが自動更新されます。「保存」で反映されます。", " 새 기록이 30개 쌓일 때마다 프로필이 자동으로 업데이트됩니다. 적용하려면 저장을 누르세요.")
+        alert.informativeText = Self.historyExplanation + L(" 同时开启「回复时参考我的风格」时，每新增 30 条记录会自动更新画像。设置需点「保存」生效。", " With My style also on, the profile updates automatically every 30 new entries. Click Save to apply.", " 「自分のスタイル」もオンのとき、30 件ごとにプロファイルが自動更新されます。「保存」で反映されます。", " 「답장에 내 스타일 반영」도 켜져 있으면 새 기록이 30개 쌓일 때마다 프로필이 자동으로 업데이트됩니다. 적용하려면 저장을 누르세요.")
         alert.alertStyle = .informational
         alert.addButton(withTitle: L("开启", "Turn On", "オンにする", "켜기"))
         alert.addButton(withTitle: L("取消", "Cancel", "キャンセル", "취소"))
@@ -276,10 +276,10 @@ struct SettingsView: View {
                            "既定ではオフ：ターミナルやエディタにはキーやトークンがよく表示されます。", "기본값은 꺼짐: 터미널과 편집기에는 키와 토큰이 자주 표시됩니다."))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Toggle(L("鼠标划词读不到文字时，模拟 ⌘C 读取", "Use ⌘C when a mouse selection can't be read directly", "マウス選択を直接読めないときは ⌘C で読み取る", "마우스 선택을 바로 읽을 수 없으면 ⌘C로 읽기"), isOn: $model.mouseClipboardFallback)
-                    Text(L("默认开启：微信、Telegram 等无法直接读取选中文字的应用靠它弹出按钮。上面的应用、网页和窗口检查通过后才会模拟 ⌘C，读到后再检查内容；选中内容会短暂经过剪贴板，剪贴板管理器可能记下它。要求最严时可关闭，关闭后这些应用请用 ⌥⌘T。",
-                           "On by default: WeChat, Telegram and other apps whose selection can't be read directly need it for the button. ⌘C is used only after the app, page and window checks pass, and the content is checked afterwards; the selection briefly passes through the clipboard, where a clipboard manager may record it. Turn it off for the strictest setting and use ⌥⌘T in those apps.",
-                           "既定でオン：WeChat や Telegram など、選択を直接読めないアプリでボタンを出すために使います。アプリ・ページ・ウィンドウの確認を通過した後にだけ ⌘C を使い、読み取った内容も確認します。選択内容は一時的にクリップボードを通るため、クリップボード管理アプリに記録される場合があります。最も厳しくするならオフにし、これらのアプリでは ⌥⌘T を使ってください。", "기본값은 켜짐: WeChat, Telegram처럼 선택을 바로 읽을 수 없는 앱에서 버튼을 표시하려면 필요합니다. 앱·페이지·윈도우 검사를 통과한 뒤에만 ⌘C를 사용하고, 읽은 내용도 검사합니다. 선택한 내용이 잠시 클립보드를 거치므로 클립보드 관리자가 기록할 수 있습니다. 가장 엄격하게 하려면 끄고 해당 앱에서는 ⌥⌘T를 사용하세요."))
+                    Toggle(L("鼠标划词读不到文字时，也显示按钮", "Show the button when a mouse selection can't be read directly", "マウス選択を直接読めないときもボタンを表示", "마우스 선택을 바로 읽을 수 없을 때도 버튼 표시"), isOn: $model.mouseClipboardFallback)
+                    Text(L("默认开启：微信、Telegram 等无法直接读取选中文字的应用靠它弹出按钮。划词时不会模拟按键；只有点了按钮，才模拟一次 ⌘C 读取，读到后再检查内容。选中内容会短暂经过剪贴板，剪贴板管理器可能记下它。拖动窗口或滚动条时不出按钮，其他不是选文字的拖动偶尔也会出按钮，不点会自动消失。关闭后，这些应用请用 ⌥⌘T。",
+                           "On by default: WeChat, Telegram and other apps whose selection can't be read directly need it for the button. Selecting never sends keys; only clicking the button sends ⌘C once to read the text, which is then checked. The selection briefly passes through the clipboard, where a clipboard manager may record it. Moving a window or a scroll bar shows no button; other drags that select nothing may, and it goes away by itself. Turned off, use ⌥⌘T in those apps.",
+                           "既定でオン：WeChat や Telegram など、選択を直接読めないアプリでボタンを出すために使います。選択しただけではキーを送りません。ボタンをクリックしたときにだけ ⌘C で読み取り、内容を確認します。選択内容は一時的にクリップボードを通るため、クリップボード管理アプリに記録される場合があります。ウィンドウやスクロールバーのドラッグではボタンを出しません。それ以外の選択でないドラッグでは出ることがありますが、自動で消えます。オフにした場合、これらのアプリでは ⌥⌘T を使ってください。", "기본값은 켜짐: WeChat, Telegram처럼 선택을 바로 읽을 수 없는 앱에서 버튼을 표시하려면 필요합니다. 선택만으로는 키를 보내지 않고, 버튼을 눌렀을 때만 ⌘C를 한 번 보내 읽은 뒤 내용을 검사합니다. 선택한 내용이 잠시 클립보드를 거치므로 클립보드 관리자가 기록할 수 있습니다. 윈도우나 스크롤 막대를 끌 때는 버튼이 나타나지 않으며, 텍스트를 선택하지 않는 다른 드래그에서는 나타날 수 있지만 저절로 사라집니다. 끄면 해당 앱에서는 ⌥⌘T를 사용하세요."))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -307,7 +307,7 @@ struct SettingsView: View {
                         Text(profile.status).font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(verbatim: L("仅在记录历史开启时，每新增 30 条记录自动更新画像；生成时发送最近记录到已保存的模型服务。", "With history on, the profile updates every 30 new entries, sending recent entries to your saved model service.", "履歴がオンのとき、30 件ごとにプロファイルを更新し、最近の記録を保存済みのモデルサービスに送信します。", "기록이 켜져 있으면 새 기록 30개마다 프로필을 업데이트하며, 이때 최근 기록을 저장된 모델 서비스로 보냅니다."))
+                    Text(verbatim: L("记录历史和「回复时参考我的风格」都开启时，每新增 30 条记录自动更新画像；生成时发送最近记录到已保存的模型服务。只开记录历史时只能手动更新。", "With history and My style both on, the profile updates every 30 new entries, sending recent entries to your saved model service. With history alone, update it by hand.", "履歴と「自分のスタイル」の両方がオンのとき、30 件ごとにプロファイルを自動更新し、最近の記録を保存済みのモデルサービスに送信します。履歴だけのときは手動で更新します。", "기록과 「답장에 내 스타일 반영」가 모두 켜져 있으면 새 기록 30개마다 프로필을 자동으로 업데이트하며, 이때 최근 기록을 저장된 모델 서비스로 보냅니다. 기록만 켜져 있으면 직접 업데이트하세요."))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

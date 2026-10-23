@@ -110,6 +110,31 @@ enum SSEEvent: Equatable {
     case nonEvent(String)   // not SSE at all (servers that ignore stream:true)
 }
 
+/// 0.2.1.k.13: splits a byte stream into lines on LF only (CRLF accepted), as the SSE format says.
+/// `AsyncBytes.lines` also breaks on U+2028, U+2029 and NEL, which JSON may carry unescaped; a
+/// delta containing one was cut in two and silently dropped.
+struct LineSplitter {
+    private var buffer: [UInt8] = []
+
+    /// Feeds one byte; returns a finished line when the byte was LF.
+    mutating func push(_ byte: UInt8) -> String? {
+        guard byte == 0x0A else { buffer.append(byte); return nil }
+        return take()
+    }
+
+    /// The last line, if the stream did not end with LF.
+    mutating func finish() -> String? {
+        buffer.isEmpty ? nil : take()
+    }
+
+    private mutating func take() -> String {
+        if buffer.last == 0x0D { buffer.removeLast() }
+        let line = String(decoding: buffer, as: UTF8.self)
+        buffer.removeAll(keepingCapacity: true)
+        return line
+    }
+}
+
 enum SSEParser {
     static func parse(_ line: String) -> SSEEvent {
         let trimmedLine = line.trimmingCharacters(in: .whitespaces)
@@ -155,6 +180,12 @@ struct ChatChunk: Decodable {
 
 /// Minimal OpenAI-compatible chat client (streaming via SSE).
 enum LLMClient {
+    /// 0.2.1.k.13: no cookies or cache on disk for the model endpoint (the shared session keeps them).
+    static let session = URLSession(configuration: .ephemeral)
+    /// A runaway answer is cut off here (the stream is closed, so the provider stops generating).
+    /// Far above any real translation, rewrite or reply of a 4,000-character selection.
+    static let maxOutputCharacters = 24_000
+
     private static func makeRequest(config: LLMConfig, messages: [ChatMessage], temperature: Double,
                                     stream: Bool, maxTokens: Int?) throws -> URLRequest {
         guard !config.apiKey.trimmed.isEmpty else { throw LLMError.missingKey }
@@ -188,40 +219,56 @@ enum LLMClient {
                            onDelta: @escaping @MainActor @Sendable (String) -> Void) async throws {
         let request = try makeRequest(config: config, messages: messages, temperature: temperature,
                                       stream: true, maxTokens: nil)
-        let (bytes, response) = try await URLSession.shared.bytes(for: request, delegate: NoRedirects.shared)
+        let (bytes, response) = try await session.bytes(for: request, delegate: NoRedirects.shared)
         guard let http = response as? HTTPURLResponse else {
             throw LLMError.api(L("无效的响应", "Invalid response", "無効な応答", "잘못된 응답"))
         }
 
         if !(200..<300).contains(http.statusCode) {
-            var body = ""
-            for try await line in bytes.lines {
-                body += line + "\n"
-                if body.count > 2000 { break }
+            var body: [UInt8] = []
+            for try await byte in bytes {
+                body.append(byte)
+                if body.count > 8000 { break }
             }
-            throw LLMError.http(http.statusCode, describeErrorBody(body))
+            throw LLMError.http(http.statusCode, describeErrorBody(String(decoding: body, as: UTF8.self)))
         }
 
         let decoder = JSONDecoder()
         var receivedAny = false
         var nonEventBody = ""   // for servers that ignore stream:true
+        var nonEventBytes = 0
+        var outputCharacters = 0
+        var splitter = LineSplitter()
 
-        streamLoop: for try await line in bytes.lines {
-            try Task.checkCancellation()
+        /// One SSE line; false ends the stream.
+        func handle(_ line: String) async throws -> Bool {
             switch SSEParser.parse(line) {
             case .ignore:
-                continue
+                return true
             case .done:
-                break streamLoop
+                return false
             case .failure(let message):
                 throw LLMError.api(message)
             case .delta(let piece):
                 receivedAny = true
+                outputCharacters += piece.count
                 await onDelta(piece)
+                return outputCharacters < maxOutputCharacters
             case .nonEvent(let raw):
-                if nonEventBody.count < 200_000 { nonEventBody += raw + "\n" }
+                if nonEventBytes < 200_000 {
+                    nonEventBody += raw + "\n"
+                    nonEventBytes += raw.utf8.count + 1
+                }
+                return true
             }
         }
+
+        streamLoop: for try await byte in bytes {
+            guard let line = splitter.push(byte) else { continue }
+            try Task.checkCancellation()
+            if try await !handle(line) { break streamLoop }
+        }
+        if let last = splitter.finish() { _ = try await handle(last) }
         try Task.checkCancellation()
 
         if !receivedAny {
@@ -249,7 +296,7 @@ enum LLMClient {
             stream: false,
             maxTokens: 8
         )
-        let (data, response) = try await URLSession.shared.data(for: request, delegate: NoRedirects.shared)
+        let (data, response) = try await session.data(for: request, delegate: NoRedirects.shared)
         guard let http = response as? HTTPURLResponse else { throw LLMError.api(L("无效的响应", "Invalid response", "無効な応答", "잘못된 응답")) }
         let body = String(data: data, encoding: .utf8) ?? ""
         guard (200..<300).contains(http.statusCode) else {

@@ -92,24 +92,21 @@ final class HistoryStore: @unchecked Sendable {
         } catch { return [] }
     }
 
+    /// 0.2.1.k.12: one line per entry, so the count is the number of line breaks (no JSON decoding
+    /// of the whole file every time Settings opens).
     var count: Int {
         queue.sync {
             guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return 0 }
             defer { try? handle.close() }
-            var pending = Data()
             var total = 0
-            let decoder = JSONDecoder()
+            var lastByte: UInt8 = 0x0A
             do {
-                while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
-                    pending.append(chunk)
-                    while let newline = pending.firstIndex(of: 0x0A) {
-                        if (try? decoder.decode(HistoryEntry.self, from: Data(pending[..<newline]))) != nil { total += 1 }
-                        pending.removeSubrange(...newline)
-                    }
+                while let chunk = try handle.read(upToCount: 256 * 1024), !chunk.isEmpty {
+                    total += chunk.reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) }
+                    lastByte = chunk[chunk.index(before: chunk.endIndex)]
                 }
-                if (try? decoder.decode(HistoryEntry.self, from: pending)) != nil { total += 1 }
             } catch { return total }
-            return total
+            return lastByte == 0x0A ? total : total + 1
         }
     }
 

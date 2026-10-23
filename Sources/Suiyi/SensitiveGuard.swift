@@ -1,4 +1,5 @@
-import Foundation
+import AppKit
+import CryptoKit
 
 /// 0.2.1.k.01: local, deterministic checks that keep passwords, keys and similar secrets away from
 /// the model, the history file and the synthetic ⌘C. Nothing here touches the network; the rules
@@ -326,8 +327,14 @@ enum SensitiveGuard {
         "com.agilebits.onepassword", "com.bitwarden.desktop",
     ]
 
+    /// Marks a concealed copy Suiyi made itself (a result the user confirmed past a block).
+    static let ownPasteboardType = NSPasteboard.PasteboardType("ai.mars.suiyi.own-copy")
+
+    /// 0.2.1.k.13: Suiyi's own concealed copy does not count; before, copying such a result made the
+    /// next ⌥⌘T in WeChat or Telegram fail with "no selected text" until something else was copied.
     static func isSensitivePasteboard(types: [String]) -> Bool {
-        types.contains { sensitivePasteboardTypes.contains($0) }
+        if types.contains(ownPasteboardType.rawValue) { return false }
+        return types.contains { sensitivePasteboardTypes.contains($0) }
     }
 
     // MARK: - Confirming a block
@@ -340,7 +347,15 @@ enum SensitiveGuard {
             let reason: Reason
             let pid: pid_t
             let title: String?
-            let text: String?
+            /// 0.2.1.k.11: a digest, so the secret-looking text itself is not kept in memory.
+            let textDigest: String?
+
+            init(reason: Reason, pid: pid_t, title: String?, text: String?) {
+                self.reason = reason
+                self.pid = pid
+                self.title = title
+                self.textDigest = text.map { SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() }
+            }
         }
 
         static let minDelay: TimeInterval = 1
@@ -355,11 +370,15 @@ enum SensitiveGuard {
 
         /// Keeps the first arming time, so pressing again too early does not restart the wait.
         mutating func arm(_ key: Key, now: Date = Date()) {
+            armed = armed.filter { now.timeIntervalSince($0.value) <= Self.window }
             guard key.reason.canConfirm, armed[key] == nil else { return }
             armed[key] = now
         }
 
         mutating func reset() { armed = [:] }
+
+        /// For tests.
+        var armedCount: Int { armed.count }
     }
 
     // MARK: - User-facing notices

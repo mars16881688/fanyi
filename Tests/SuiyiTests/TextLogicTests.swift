@@ -344,6 +344,13 @@ struct AgentIntegrationTests {
             #expect(!file.content.contains("Fanyi"))
         }
     }
+
+    @Test("The two agent files are the targets; the profile is allowed inside a Git home")
+    func cleanupTargets() throws {
+        #expect(AgentIntegration.files.map(\.name) == ["Codex", "Claude Code"])
+        let profile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".suiyi/profile.md")
+        try AgentIntegration.validateUserFile(profile, rejectRepositories: false)
+    }
 }
 
 @Suite("HistoryEntry")
