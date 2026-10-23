@@ -5,7 +5,7 @@ import Foundation
 enum AppSettings {
     static let defaultBaseURL = "https://api.deepseek.com/v1"
     static let defaultModel = "deepseek-chat"
-    static let defaultExcluded = "com.apple.keychainaccess,com.1password.1password,com.agilebits.onepassword7"
+    static let defaultExcluded = "com.apple.keychainaccess,com.1password.1password,com.agilebits.onepassword7,dev.tryomarchy.native"
 
     private enum Key {
         static let baseURL = "baseURL"
@@ -68,6 +68,38 @@ enum AppSettings {
         guard !store.bool(forKey: marker) else { return }
         store.set(true, forKey: Key.mouseClipboardFallback)
         store.set(true, forKey: marker)
+    }
+
+    /// Try Omarchy runs a Linux VM in a Mac window and forwards ⌘ chords into it, so Suiyi's ⌘C
+    /// fallback lands in the VM instead of copying. 0.2.1.k.09: add it once to a saved exclusion
+    /// list (new installs get it from the default); the user may remove it again in Settings.
+    static let tryOmarchyBundleID = "dev.tryomarchy.native"
+
+    static func applyK09Defaults() {
+        let marker = "k09.tryOmarchyExcluded"
+        guard !store.bool(forKey: marker) else { return }
+        if let saved = store.string(forKey: Key.excluded) {
+            let updated = adding(tryOmarchyBundleID, toExcluded: saved)
+            if updated != saved { store.set(updated, forKey: Key.excluded) }
+        }
+        store.set(true, forKey: marker)
+    }
+
+    static func adding(_ bundleID: String, toExcluded raw: String) -> String {
+        if parseExcluded(raw).contains(bundleID.lowercased()) { return raw }
+        let trimmed = raw.trimmed
+        return trimmed.isEmpty ? bundleID : trimmed + "," + bundleID
+    }
+
+    static func removing(_ bundleID: String, fromExcluded raw: String) -> String {
+        raw.split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace })
+            .filter { $0.lowercased() != bundleID.lowercased() }
+            .joined(separator: ",")
+    }
+
+    /// 0.2.1.k.09: the menu's "在「…」中停用随译" toggle.
+    static func setExcluded(_ bundleID: String, _ excluded: Bool) {
+        excludedRaw = excluded ? adding(bundleID, toExcluded: excludedRaw) : removing(bundleID, fromExcluded: excludedRaw)
     }
 
     static var baseURL: String {

@@ -8,6 +8,13 @@ struct Capture {
     var overridden = false
 }
 
+/// 0.2.1.k.10: a mouse selection that could not be read without the clipboard. The button is
+/// shown anyway, and ⌘C is sent only when the user clicks it.
+struct UnreadSelection {
+    let target: SelectionReader.FocusTarget
+    let points: [NSPoint]
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Strong reference; NSApplication.delegate is weak.
@@ -19,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private var pauseItem: NSMenuItem?
+    private var excludeItem: NSMenuItem?
+    private var excludeTarget: (id: String, name: String)?
     private var accessibilityItem: NSMenuItem?
     /// 0.2.1.k.02: why the last mouse selection did or did not get a button (no selected text).
     private var diagnosisItem: NSMenuItem?
@@ -32,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var paused = false
     private var pendingCapture: Capture?
+    private var pendingUnread: UnreadSelection?
     private var lastCapture: Capture?
     private var selectionGeneration = 0
     private var requestGeneration = 0
@@ -57,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         LegacyMigration.runIfNeeded()
         AppSettings.registerDefaults()
         AppSettings.applyK02Defaults()
+        AppSettings.applyK09Defaults()
         paused = AppSettings.paused
 
         reader = SelectionReader()
@@ -172,6 +183,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let pause = makeItem(pauseTitle, #selector(togglePause(_:)))
         menu.addItem(pause)
         pauseItem = pause
+        let exclude = makeItem("", #selector(toggleExcludeFrontApp(_:)))
+        exclude.isHidden = true
+        menu.addItem(exclude)
+        excludeItem = exclude
         let access = makeItem(L("授予辅助功能权限…", "Grant Accessibility Access…", "アクセシビリティを許可…"), #selector(openAccessibilitySettings(_:)))
         access.isHidden = AXIsProcessTrusted()
         menu.addItem(access)
@@ -199,6 +214,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         accessibilityItem?.isHidden = AXIsProcessTrusted()
         diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：") + lastSelectionNote
         diagnosisItem?.isHidden = lastSelectionNote.isEmpty
+        // 0.2.1.k.09: the app in front when the menu opens (opening the menu does not activate Suiyi).
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.processIdentifier != ProcessInfo.processInfo.processIdentifier, let id = front.bundleIdentifier {
+            let name = front.localizedName ?? id
+            excludeTarget = (id, name)
+            excludeItem?.title = L("在「\(name)」中停用随译", "Turn Off Suiyi in \(name)", "「\(name)」で Suiyi をオフ")
+            excludeItem?.state = AppSettings.isExcluded(bundleID: id) ? .on : .off
+            excludeItem?.isHidden = false
+        } else {
+            excludeTarget = nil
+            excludeItem?.isHidden = true
+        }
     }
 
     /// Records the outcome of a mouse selection for the menu's diagnosis line; never the text itself.
@@ -224,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .focusChanged: return L("焦点已切到其他应用", "focus moved to another app", "フォーカスが別のアプリに移動")
         case .secureField: return L("选中的是密码框", "the selection is in a password field", "パスワード欄の選択")
         case .notAtPointer: return L("读到的选区不在鼠标位置", "the selection found is not where the pointer is", "選択範囲がポインタの位置にない")
-        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 开启模拟 ⌘C，或按 ⌥⌘T", "couldn't read the selection: turn on ⌘C in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで ⌘C をオン、または ⌥⌘T")
+        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 打开「读不到时也显示按钮」，或按 ⌥⌘T", "couldn't read the selection: turn on the button for unreadable text in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで「読めないときもボタンを表示」をオン、または ⌥⌘T")
         case .copyFailed: return L("模拟 ⌘C 没有拿到文字", "⌘C returned no text", "⌘C でテキストを取得できず")
         case nil: return L("没有读到文字", "no text read", "テキストを読み取れず")
         }
@@ -244,6 +271,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AppSettings.paused = paused
         if paused { anchor.hide() }
         pauseItem?.title = pauseTitle
+    }
+
+    /// Adds the app to the exclusion list, or takes it off again (same list as Settings › 排除的应用).
+    @objc private func toggleExcludeFrontApp(_ sender: Any?) {
+        guard let target = excludeTarget else { return }
+        let exclude = !AppSettings.isExcluded(bundleID: target.id)
+        AppSettings.setExcluded(target.id, exclude)
+        if exclude { anchor.hide() }
     }
 
     @objc private func openSettings(_ sender: Any?) {
@@ -384,19 +419,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        // Clipboard fallback only when turned on in Settings, only for real drags (not
-        // double-clicks), and never in apps where ⌘C would copy something other than text.
+        // 0.2.1.k.10: a mouse gesture never sends keys. The selection is read through Accessibility
+        // only; where that finds nothing (WeChat, Telegram), a drag may still get the button, and
+        // ⌘C is sent when the user clicks it. Never in apps where ⌘C would copy files, not text.
         let bundle = bundleID?.lowercased() ?? ""
-        let allowClipboard = AppSettings.mouseClipboardFallback && gesture.kind == .drag
+        let mayReadOnClick = AppSettings.mouseClipboardFallback && gesture.kind == .drag
             && !Self.noClipboardFallbackOnMouse.contains(bundle)
 
         selectionGeneration += 1
         let generation = selectionGeneration
         Task { @MainActor in
-            guard let selection = await self.reader.read(allowClipboard: allowClipboard,
+            guard let selection = await self.reader.read(allowClipboard: false,
                                                          gesturePoints: [gesture.down, gesture.up],
                                                          target: target) else {
-                if generation == self.selectionGeneration { self.noteSelection(self.note(for: self.reader.lastMiss), app: target.app) }
+                guard generation == self.selectionGeneration, !self.paused else { return }
+                guard mayReadOnClick, self.reader.lastMiss == .unreadableWithoutCopy else {
+                    self.noteSelection(self.note(for: self.reader.lastMiss), app: target.app)
+                    return
+                }
+                if WindowProbe.moved(gesture.startWindow, gesture.startWindow.flatMap(WindowProbe.current)) {
+                    self.noteSelection(L("拖动的是窗口，不出按钮", "a window was moved, no button", "ウィンドウの移動のためボタンなし"), app: target.app)
+                    return
+                }
+                if self.reader.isNonTextControl(at: gesture.down, pid: target.pid) {
+                    self.noteSelection(L("拖动的是滚动条或滑块，不出按钮", "a scroll bar or slider was dragged, no button",
+                                         "スクロールバー等の操作のためボタンなし"), app: target.app)
+                    return
+                }
+                self.noteSelection(L("读不到文字，已弹出按钮，点了才读取", "text not readable; button shown, read on click",
+                                     "読み取れず：ボタンを表示（クリック時に読み取り）"), app: target.app)
+                self.pendingCapture = nil
+                self.pendingUnread = UnreadSelection(target: target, points: [gesture.down, gesture.up])
+                self.anchor.show(at: gesture.up)
                 return
             }
             guard generation == self.selectionGeneration, !self.paused else { return }
@@ -407,8 +461,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             self.noteSelection(L("已弹出按钮", "button shown", "ボタンを表示"), app: target.app)
             let context = ContextCollector.collect(for: selection, windowTitle: title)
+            self.pendingUnread = nil
             self.pendingCapture = Capture(selection: selection, context: context)
             self.anchor.show(at: gesture.up)
+        }
+    }
+
+    /// 0.2.1.k.10: the user clicked a button shown without text. Only now is ⌘C sent, to the same app
+    /// as before; the window check runs again, and the content check comes before anything is sent.
+    private func readOnClick(_ unread: UnreadSelection, kind: ActionKind, at point: NSPoint) {
+        pendingUnread = nil
+        selectionGeneration += 1
+        Task { @MainActor in
+            guard let target = self.foreignFocus(), target.pid == unread.target.pid else {
+                self.result.showNotice(L("焦点已切到其他应用，没有读取。", "The focus moved to another app; nothing was read.",
+                                         "フォーカスが別のアプリに移ったため、読み取りませんでした。"), at: point)
+                return
+            }
+            let title = ContextCollector.windowTitle(pid: target.pid)
+            if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
+                                                       allowCodeApps: AppSettings.allowInCodeApps) {
+                self.block(SensitiveGuard.ConfirmGate.Key(reason: reason, pid: target.pid, title: title, text: nil), at: point)
+                return
+            }
+            guard let selection = await self.reader.read(allowClipboard: true, gesturePoints: unread.points, target: target) else {
+                self.result.showNotice(L("没有检测到选中的文字。", "No selected text found.", "選択されたテキストが見つかりません。"), at: point)
+                return
+            }
+            if SensitiveGuard.looksSensitive(selection.text) {
+                self.block(SensitiveGuard.ConfirmGate.Key(reason: .sensitiveText, pid: target.pid, title: title,
+                                                          text: selection.text), at: point)
+                return
+            }
+            let context = ContextCollector.collect(for: selection, windowTitle: title)
+            self.run(kind, capture: Capture(selection: selection, context: context), at: point)
         }
     }
 
@@ -422,6 +508,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// ⌘C in the app (full text and formatting). If the app has lost focus meanwhile, the text Suiyi
     /// read is copied instead (trimmed, at most 4,000 characters). Nothing is sent to the model.
     private func copyPendingSelection() {
+        if let unread = pendingUnread {
+            // Nothing was read: the app's own ⌘C is the only copy there is.
+            Task { @MainActor in
+                if NSWorkspace.shared.frontmostApplication?.processIdentifier == unread.target.pid {
+                    _ = await Clipboard.copyForUser()
+                }
+            }
+            return
+        }
         guard let capture = pendingCapture else { return }
         Task { @MainActor in
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == capture.selection.pid,
@@ -433,6 +528,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func anchorPicked(_ kind: ActionKind) {
+        if let unread = pendingUnread {
+            readOnClick(unread, kind: kind, at: anchor.referencePoint)
+            return
+        }
         guard let capture = pendingCapture else { return }
         run(kind, capture: capture, at: anchor.referencePoint)
     }

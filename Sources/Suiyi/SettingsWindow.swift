@@ -273,10 +273,10 @@ struct SettingsView: View {
                            "既定ではオフ：ターミナルやエディタにはキーやトークンがよく表示されます。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Toggle(L("鼠标划词读不到文字时，模拟 ⌘C 读取", "Use ⌘C when a mouse selection can't be read directly", "マウス選択を直接読めないときは ⌘C で読み取る"), isOn: $model.mouseClipboardFallback)
-                    Text(L("默认开启：微信、Telegram 等无法直接读取选中文字的应用靠它弹出按钮。上面的应用、网页和窗口检查通过后才会模拟 ⌘C，读到后再检查内容；选中内容会短暂经过剪贴板，剪贴板管理器可能记下它。要求最严时可关闭，关闭后这些应用请用 ⌥⌘T。",
-                           "On by default: WeChat, Telegram and other apps whose selection can't be read directly need it for the button. ⌘C is used only after the app, page and window checks pass, and the content is checked afterwards; the selection briefly passes through the clipboard, where a clipboard manager may record it. Turn it off for the strictest setting and use ⌥⌘T in those apps.",
-                           "既定でオン：WeChat や Telegram など、選択を直接読めないアプリでボタンを出すために使います。アプリ・ページ・ウィンドウの確認を通過した後にだけ ⌘C を使い、読み取った内容も確認します。選択内容は一時的にクリップボードを通るため、クリップボード管理アプリに記録される場合があります。最も厳しくするならオフにし、これらのアプリでは ⌥⌘T を使ってください。"))
+                    Toggle(L("鼠标划词读不到文字时，也显示按钮", "Show the button when a mouse selection can't be read directly", "マウス選択を直接読めないときもボタンを表示"), isOn: $model.mouseClipboardFallback)
+                    Text(L("默认开启：微信、Telegram 等无法直接读取选中文字的应用靠它弹出按钮。划词时不会模拟按键；只有点了按钮，才模拟一次 ⌘C 读取，读到后再检查内容。选中内容会短暂经过剪贴板，剪贴板管理器可能记下它。拖动窗口或滚动条时不出按钮，其他不是选文字的拖动偶尔也会出按钮，不点会自动消失。关闭后，这些应用请用 ⌥⌘T。",
+                           "On by default: WeChat, Telegram and other apps whose selection can't be read directly need it for the button. Selecting never sends keys; only clicking the button sends ⌘C once to read the text, which is then checked. The selection briefly passes through the clipboard, where a clipboard manager may record it. Moving a window or a scroll bar shows no button; other drags that select nothing may, and it goes away by itself. Turned off, use ⌥⌘T in those apps.",
+                           "既定でオン：WeChat や Telegram など、選択を直接読めないアプリでボタンを出すために使います。選択しただけではキーを送りません。ボタンをクリックしたときにだけ ⌘C で読み取り、内容を確認します。選択内容は一時的にクリップボードを通るため、クリップボード管理アプリに記録される場合があります。ウィンドウやスクロールバーのドラッグではボタンを出しません。それ以外の選択でないドラッグでは出ることがありますが、自動で消えます。オフにした場合、これらのアプリでは ⌥⌘T を使ってください。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

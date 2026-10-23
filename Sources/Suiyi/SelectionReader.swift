@@ -154,6 +154,18 @@ final class SelectionReader {
         )
     }
 
+    /// 0.2.1.k.10: dragging these moves a control, not a text selection.
+    static let nonTextRoles: Set<String> = ["AXScrollBar", "AXValueIndicator", "AXSlider", "AXSplitter"]
+
+    /// Whether the drag began on a scroll bar, slider or split divider of the app.
+    func isNonTextControl(at point: NSPoint, pid: pid_t) -> Bool {
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, AX.timeout)
+        guard let hit = AX.element(at: point, in: appElement) else { return false }
+        AXUIElementSetMessagingTimeout(hit, AX.timeout)
+        return Self.nonTextRoles.contains(AX.string(hit, kAXRoleAttribute) ?? "")
+    }
+
     /// Why the last `read` returned nothing (no content, just the step), for the menu's diagnosis line.
     enum Miss {
         case secureInput, focusChanged, secureField, notAtPointer, unreadableWithoutCopy, copyFailed

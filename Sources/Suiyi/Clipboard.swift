@@ -8,6 +8,7 @@ enum Clipboard {
 
     private static let copyKey: CGKeyCode = 8    // kVK_ANSI_C
     private static let pasteKey: CGKeyCode = 9   // kVK_ANSI_V
+    private static let commandKey: CGKeyCode = 55  // kVK_Command
     /// Convention honoured by most clipboard managers: "don't record this".
     private static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
 
@@ -38,14 +39,22 @@ enum Clipboard {
         }
     }
 
-    static func postShortcut(_ key: CGKeyCode, flags: CGEventFlags = .maskCommand) {
+    /// ⌘ down, key down, key up, ⌘ up: what a keyboard sends. 0.2.1.k.09: the key alone with the ⌘
+    /// flag made tools that track modifier keys think ⌘ was still held; Try Omarchy then kept Super
+    /// pressed in its Linux VM, turning every later keystroke there into a shortcut.
+    static func shortcutSequence(_ key: CGKeyCode) -> [(key: CGKeyCode, down: Bool, flags: CGEventFlags)] {
+        [(commandKey, true, .maskCommand), (key, true, .maskCommand), (key, false, .maskCommand), (commandKey, false, [])]
+    }
+
+    static func postShortcut(_ key: CGKeyCode) {
         let source = CGEventSource(stateID: .combinedSessionState)
-        guard let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { return }
-        down.flags = flags
-        up.flags = flags
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        let events = shortcutSequence(key).compactMap { step -> CGEvent? in
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: step.key, keyDown: step.down) else { return nil }
+            event.flags = step.flags
+            return event
+        }
+        guard events.count == 4 else { return }   // all or nothing: never leave ⌘ down
+        for event in events { event.post(tap: .cghidEventTap) }
     }
 
     /// Sends ⌘C to the frontmost app, waits up to 1 s for the pasteboard to
