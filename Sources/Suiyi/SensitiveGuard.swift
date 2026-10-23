@@ -1,5 +1,5 @@
+import AppKit
 import CryptoKit
-import Foundation
 
 /// 0.2.1.k.01: local, deterministic checks that keep passwords, keys and similar secrets away from
 /// the model, the history file and the synthetic ⌘C. Nothing here touches the network; the rules
@@ -327,8 +327,14 @@ enum SensitiveGuard {
         "com.agilebits.onepassword", "com.bitwarden.desktop",
     ]
 
+    /// Marks a concealed copy Suiyi made itself (a result the user confirmed past a block).
+    static let ownPasteboardType = NSPasteboard.PasteboardType("ai.mars.suiyi.own-copy")
+
+    /// 0.2.1.k.13: Suiyi's own concealed copy does not count; before, copying such a result made the
+    /// next ⌥⌘T in WeChat or Telegram fail with "no selected text" until something else was copied.
     static func isSensitivePasteboard(types: [String]) -> Bool {
-        types.contains { sensitivePasteboardTypes.contains($0) }
+        if types.contains(ownPasteboardType.rawValue) { return false }
+        return types.contains { sensitivePasteboardTypes.contains($0) }
     }
 
     // MARK: - Confirming a block

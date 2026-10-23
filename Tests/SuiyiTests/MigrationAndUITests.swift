@@ -344,3 +344,42 @@ struct K12Tests {
         }
     }
 }
+
+@Suite("0.2.1.k.13 low-priority fixes")
+struct K13Tests {
+    private func lines(_ bytes: [UInt8]) -> [String] {
+        var splitter = LineSplitter()
+        var out: [String] = []
+        for byte in bytes { if let line = splitter.push(byte) { out.append(line) } }
+        if let last = splitter.finish() { out.append(last) }
+        return out
+    }
+
+    @Test("SSE lines break on LF only, so U+2028 inside JSON survives")
+    func lineSplitter() {
+        let payload = "data: {\"choices\":[{\"delta\":{\"content\":\"a\u{2028}b\u{2029}c\u{0085}d\"}}]}\r\ndata: [DONE]\n"
+        let result = lines(Array(payload.utf8))
+        #expect(result.count == 2)
+        #expect(result[0].hasSuffix("}]}"))                  // CR stripped, nothing cut in two
+        #expect(SSEParser.parse(result[0]) == .delta("a\u{2028}b\u{2029}c\u{0085}d"))
+        #expect(SSEParser.parse(result[1]) == .done)
+        #expect(lines(Array("no newline at end".utf8)) == ["no newline at end"])
+        #expect(lines(Array("中文\n".utf8)) == ["中文"])
+    }
+
+    @Test("Suiyi's own concealed copy does not block the next ⌘C read")
+    func ownCopy() {
+        let concealed = ["public.utf8-plain-text", "org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType"]
+        #expect(SensitiveGuard.isSensitivePasteboard(types: concealed))
+        #expect(!SensitiveGuard.isSensitivePasteboard(types: concealed + [SensitiveGuard.ownPasteboardType.rawValue]))
+        #expect(SensitiveGuard.isSensitivePasteboard(types: ["com.agilebits.onepassword"]))
+    }
+
+    @Test("The default exclusion list holds only what SensitiveGuard does not already block")
+    func defaultExclusions() {
+        #expect(AppSettings.parseExcluded(AppSettings.defaultExcluded) == ["dev.tryomarchy.native"])
+        for id in ["com.apple.keychainaccess", "com.1password.1password", "com.agilebits.onepassword7"] {
+            #expect(SensitiveGuard.isPasswordApp(id), "\(id)")
+        }
+    }
+}

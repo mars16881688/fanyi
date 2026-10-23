@@ -306,12 +306,11 @@ struct AgentIntegrationTests {
         #expect(AgentIntegration.strippingBlock(text) == "a\n\nb")
     }
 
-    @Test("New blocks point at ~/.suiyi")
-    func newPaths() {
-        for file in AgentIntegration.files {
-            #expect(file.content.contains("~/.suiyi/profile.md"))
-            #expect(!file.content.contains("Fanyi"))
-        }
+    @Test("Only the two agent files are cleaned; the profile is allowed inside a Git home")
+    func cleanupTargets() throws {
+        #expect(AgentIntegration.files.map(\.name) == ["Codex", "Claude Code"])
+        let profile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".suiyi/profile.md")
+        try AgentIntegration.validateUserFile(profile, rejectRepositories: false)
     }
 }
 

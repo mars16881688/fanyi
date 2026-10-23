@@ -17,7 +17,7 @@ enum StyleContext {
             (profileSourceName, HistoryStore.shared.folderURL.appendingPathComponent("profile.md"), 6000),
         ]
         let current = files.map { file -> Stamp in
-            guard (try? AgentIntegration.validateUserFile(file.1)) != nil else {
+            guard (try? AgentIntegration.validateUserFile(file.1, rejectRepositories: false)) != nil else {
                 return Stamp(date: nil, size: nil)
             }
             let attrs = try? FileManager.default.attributesOfItem(atPath: file.1.path)
@@ -27,7 +27,7 @@ enum StyleContext {
         var text = ""
         var sources: [String] = []
         for (name, url, limit) in files {
-            guard (try? AgentIntegration.validateUserFile(url)) != nil,
+            guard (try? AgentIntegration.validateUserFile(url, rejectRepositories: false)) != nil,
                   let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
             // Lines that look like secrets are dropped even from the (model-written) profile.
             let cleaned = raw.components(separatedBy: .newlines)

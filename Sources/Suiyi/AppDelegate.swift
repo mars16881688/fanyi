@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 0.2.1.k.02: why the last mouse selection did or did not get a button (no selected text).
     private var diagnosisItem: NSMenuItem?
     private var lastSelectionNote = ""
+    private var lastSelectionDate: Date?
 
     private var reader: SelectionReader!
     private var monitor: SelectionMonitor!
@@ -204,7 +205,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         pauseItem?.title = pauseTitle
         accessibilityItem?.isHidden = AXIsProcessTrusted()
-        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：") + lastSelectionNote
+        let time = lastSelectionDate.map { " · " + DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .medium) } ?? ""
+        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：") + lastSelectionNote + time
         diagnosisItem?.isHidden = lastSelectionNote.isEmpty
         // 0.2.1.k.09: the app in front when the menu opens (opening the menu does not activate Suiyi).
         if let front = NSWorkspace.shared.frontmostApplication,
@@ -221,9 +223,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Records the outcome of a mouse selection for the menu's diagnosis line; never the text itself.
+    /// The time is formatted when the menu opens, not on every gesture (0.2.1.k.13).
     private func noteSelection(_ message: String, app: NSRunningApplication? = nil) {
-        let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        lastSelectionNote = [message, app?.localizedName, time].compactMap { $0 }.joined(separator: " · ")
+        lastSelectionNote = [message, app?.localizedName].compactMap { $0 }.joined(separator: " · ")
+        lastSelectionDate = Date()
     }
 
     private func note(for reason: SensitiveGuard.Reason) -> String {
@@ -377,6 +380,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// What the checks before any read found. 0.2.1.k.13: the mouse, the button click and the hot key
+    /// all run these same checks in the same order (before, the click path skipped the exclusion
+    /// list); each entry point only decides how to tell the user.
+    private enum PreRead {
+        case ok(title: String?)
+        case excluded
+        case blocked(SensitiveGuard.Reason, title: String?)
+    }
+
+    /// Exclusion list, then password apps and pages, terminals and editors, and secret-looking titles.
+    private func preReadCheck(_ target: SelectionReader.FocusTarget) -> PreRead {
+        if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) { return .excluded }
+        let title = ContextCollector.windowTitle(pid: target.pid)
+        if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
+                                                   allowCodeApps: AppSettings.allowInCodeApps) {
+            return .blocked(reason, title: title)
+        }
+        return .ok(title: title)
+    }
+
+    private static var excludedNotice: String {
+        L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。")
+    }
+
     /// The process that really has keyboard focus (never Suiyi itself).
     private func foreignFocus() -> SelectionReader.FocusTarget? {
         let own = ProcessInfo.processInfo.processIdentifier
@@ -416,18 +443,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let bundleID = target.app?.bundleIdentifier
-        if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
-            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ"), app: target.app)
-            return
-        }
-
         // 0.2.1.k.01: password apps and pages, terminals/editors (unless allowed) and windows whose
         // title suggests credentials get no button, and nothing is read from them.
-        let title = ContextCollector.windowTitle(pid: target.pid)
-        if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
-                                                   allowCodeApps: AppSettings.allowInCodeApps) {
+        let title: String?
+        switch preReadCheck(target) {
+        case .excluded:
+            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ"), app: target.app)
+            return
+        case .blocked(let reason, _):
             noteSelection(note(for: reason), app: target.app)
             return
+        case .ok(let windowTitle):
+            title = windowTitle
         }
 
         // 0.2.1.k.10: a mouse gesture never sends keys. The selection is read through Accessibility
@@ -486,11 +513,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                          "フォーカスが別のアプリに移ったため、読み取りませんでした。"), at: point)
                 return
             }
-            let title = ContextCollector.windowTitle(pid: target.pid)
-            if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
-                                                       allowCodeApps: AppSettings.allowInCodeApps) {
-                self.block(SensitiveGuard.ConfirmGate.Key(reason: reason, pid: target.pid, title: title, text: nil), at: point)
+            let title: String?
+            switch self.preReadCheck(target) {
+            case .excluded:
+                self.result.showNotice(Self.excludedNotice, at: point)
                 return
+            case .blocked(let reason, let blockedTitle):
+                self.block(SensitiveGuard.ConfirmGate.Key(reason: reason, pid: target.pid, title: blockedTitle, text: nil), at: point)
+                return
+            case .ok(let windowTitle):
+                title = windowTitle
             }
             let selection = await self.reader.read(allowClipboard: true, gesturePoints: unread.points, target: target)
             guard generation == self.selectionGeneration else { return }   // the user moved on during the ⌘C wait
@@ -571,21 +603,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try? await Task.sleep(nanoseconds: delayNanos)
             }
             guard let target = self.foreignFocus() else { return }
-            if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
-                self.result.showNotice(L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。"), at: point)
-                return
-            }
             // 0.2.1.k.01: app, page and window checks come before any read (and before any ⌘C);
             // the content check comes after the read and before anything is sent. Each block needs
             // its own confirmation, and a window-level confirmation never skips the content check.
             let pid = target.pid
-            let title = ContextCollector.windowTitle(pid: pid)
+            let title: String?
             var overridden = false
-            if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title,
-                                                       pageURL: target.pageURL, allowCodeApps: AppSettings.allowInCodeApps) {
-                let key = SensitiveGuard.ConfirmGate.Key(reason: reason, pid: pid, title: title, text: nil)
+            switch self.preReadCheck(target) {
+            case .excluded:
+                self.result.showNotice(Self.excludedNotice, at: point)
+                return
+            case .blocked(let reason, let blockedTitle):
+                let key = SensitiveGuard.ConfirmGate.Key(reason: reason, pid: pid, title: blockedTitle, text: nil)
                 guard self.confirmGate.isConfirmed(key) else { self.block(key, at: point); return }
                 overridden = true
+                title = blockedTitle
+            case .ok(let windowTitle):
+                title = windowTitle
             }
             let noKeys = SelectionReader.sendsNoSyntheticKeys(target.app?.bundleIdentifier)
             var selection = await self.reader.read(allowClipboard: !noKeys, gesturePoints: nil, target: target)
@@ -746,7 +780,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
-        guard let capture = lastCapture, let translation = completedTranslation else { return }
+        guard let capture = lastCapture, let translation = completedTranslation else {
+            result.showReplyError(L("原文已不在，请重新划词。", "The original text is gone; select it again.", "元のテキストがありません。もう一度選択してください。"))
+            return
+        }
         streamedReply = ""
         let messages = StyleContext.replyMessages(Prompts.reply(
             text: text, direction: direction, context: context, style: AppSettings.translationStyle,

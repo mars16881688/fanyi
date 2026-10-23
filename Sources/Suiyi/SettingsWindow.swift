@@ -23,7 +23,6 @@ final class SettingsModel: ObservableObject {
     @Published var useMyStyle = false
     @Published var historyCount = 0
     @Published var styleSources = ""
-    @Published var integrationStatus = ""
     @Published var localStatus = ""
     @Published var confirmClear = false
 
@@ -66,7 +65,7 @@ final class SettingsModel: ObservableObject {
         }
         let alert = NSAlert()
         alert.messageText = L("开启记录历史？", "Turn on history?", "履歴を記録しますか？")
-        alert.informativeText = Self.historyExplanation + L(" 开启后每新增 30 条记录会自动更新画像。设置需点「保存」生效。", " The profile updates automatically every 30 new entries. Click Save to apply.", " 30 件ごとにプロファイルが自動更新されます。「保存」で反映されます。")
+        alert.informativeText = Self.historyExplanation + L(" 同时开启「回复时参考我的风格」时，每新增 30 条记录会自动更新画像。设置需点「保存」生效。", " With My style also on, the profile updates automatically every 30 new entries. Click Save to apply.", " 「自分のスタイル」もオンのとき、30 件ごとにプロファイルが自動更新されます。「保存」で反映されます。")
         alert.alertStyle = .informational
         alert.addButton(withTitle: L("开启", "Turn On", "オンにする"))
         alert.addButton(withTitle: L("取消", "Cancel", "キャンセル"))
@@ -123,9 +122,6 @@ final class SettingsModel: ObservableObject {
         let sources = StyleContext.build().sources
         styleSources = sources.isEmpty ? L("未找到任何资料", "Nothing found", "見つかりませんでした")
             : L("已找到：", "Found: ", "見つかったもの：") + sources.joined(separator: L("、", ", ", "、"))
-        let installed = AgentIntegration.status()
-        let on = L("已接入", "connected", "接続済み"), off = L("未接入", "not connected", "未接続")
-        integrationStatus = "Codex: \(installed[0] ? on : off) · Claude Code: \(installed[1] ? on : off)"
     }
 
     func openFolder() {
@@ -143,12 +139,13 @@ final class SettingsModel: ObservableObject {
         refreshLocal()
     }
 
-    func integrate(remove: Bool) {
+    /// Removes a block an older version wrote into ~/.codex/AGENTS.md or ~/.claude/CLAUDE.md. The
+    /// files are read only when this is clicked, not every time Settings opens (0.2.1.k.13).
+    func disconnect() {
         do {
-            if remove { try AgentIntegration.remove() } else { try AgentIntegration.install() }
-            localStatus = remove ? L("已移除接入。", "Disconnected.", "接続を解除しました。") : L("已接入。", "Connected.", "接続しました。")
+            try AgentIntegration.remove()
+            localStatus = L("已移除接入（如有）。", "Disconnected (if it was connected).", "接続を解除しました（接続していた場合）。")
         } catch { localStatus = L("操作失败：", "Failed: ", "失敗しました：") + error.localizedDescription }
-        refreshLocal()
     }
 
     func testConnection() {
@@ -304,7 +301,7 @@ struct SettingsView: View {
                         Text(profile.status).font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(verbatim: L("仅在记录历史开启时，每新增 30 条记录自动更新画像；生成时发送最近记录到已保存的模型服务。", "With history on, the profile updates every 30 new entries, sending recent entries to your saved model service.", "履歴がオンのとき、30 件ごとにプロファイルを更新し、最近の記録を保存済みのモデルサービスに送信します。"))
+                    Text(verbatim: L("记录历史和「回复时参考我的风格」都开启时，每新增 30 条记录自动更新画像；生成时发送最近记录到已保存的模型服务。只开记录历史时只能手动更新。", "With history and My style both on, the profile updates every 30 new entries, sending recent entries to your saved model service. With history alone, update it by hand.", "履歴と「自分のスタイル」の両方がオンのとき、30 件ごとにプロファイルを自動更新し、最近の記録を保存済みのモデルサービスに送信します。履歴だけのときは手動で更新します。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -318,10 +315,8 @@ struct SettingsView: View {
                     // 0.2.1.k.01: connecting is disabled (the profile is model-written from other people's
                     // text and would become instructions for Claude Code / Codex); removing still works.
                     HStack {
-                        Button(L("移除接入", "Disconnect", "接続を解除")) { model.integrate(remove: true) }
+                        Button(L("移除接入", "Disconnect", "接続を解除")) { model.disconnect() }
                     }
-                    Text(model.integrationStatus).font(.caption).foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                     Text(verbatim: L("此版本停用「接入 Codex / Claude Code」：画像由模型根据他人文字生成，不应成为 Agent 的指令。如以前接入过，可点「移除接入」清掉标记块。", "Connecting Codex / Claude Code is disabled in this build: the profile is model-written from other people's text and should not become agent instructions. If you connected before, Disconnect removes the marked block.", "このビルドでは「Codex / Claude Code に接続」を無効にしています。プロファイルは他人のテキストからモデルが生成したもので、エージェントへの指示にすべきではありません。以前に接続した場合は「接続を解除」でマーク付きブロックを削除できます。"))
                         .font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
