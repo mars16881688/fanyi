@@ -20,6 +20,9 @@ struct SelectionGesture {
 final class SelectionMonitor {
     var onMouseDown: (@MainActor (NSPoint) -> Void)?
     var onSelection: (@MainActor (SelectionGesture) -> Void)?
+    /// 0.2.1.k.11: whether the window snapshot can be used at all (not paused, button on, …);
+    /// false skips the window-server query.
+    var wantsWindowSnapshot: (@MainActor () -> Bool)?
 
     private var monitor: Any?
     private var downPoint = NSPoint.zero
@@ -71,7 +74,7 @@ final class SelectionMonitor {
         case .leftMouseDragged:
             if !dragging {
                 dragging = true
-                startWindow = WindowProbe.window(at: downPoint)
+                if wantsWindowSnapshot?() ?? true { startWindow = WindowProbe.window(at: downPoint) }
             }
             maxDistance = max(maxDistance, distance(location, downPoint))
         case .leftMouseUp:
@@ -106,21 +109,15 @@ enum WindowProbe {
         let bounds: CGRect
     }
 
-    /// The frontmost ordinary window (layer 0, not Suiyi's) under a Cocoa screen point.
+    /// The ordinary window (layer 0, not Suiyi's) under a Cocoa screen point. 0.2.1.k.11: asks the
+    /// window server for that one window instead of listing every window on screen.
     static func window(at point: NSPoint) -> Snapshot? {
-        let primaryHeight = ScreenGeometry.primaryScreenHeight
-        guard primaryHeight > 0,
-              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
-                                                    kCGNullWindowID) as? [[String: Any]] else { return nil }
-        let target = CGPoint(x: point.x, y: primaryHeight - point.y)
-        let own = ProcessInfo.processInfo.processIdentifier
-        for info in list {   // front to back
-            guard info[kCGWindowLayer as String] as? Int == 0,
-                  info[kCGWindowOwnerPID as String] as? pid_t != own,
-                  let snapshot = snapshot(info), snapshot.bounds.contains(target) else { continue }
-            return snapshot
-        }
-        return nil
+        let number = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+        guard number > 0,
+              let info = (CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(number)) as? [[String: Any]])?.first,
+              info[kCGWindowLayer as String] as? Int == 0,
+              info[kCGWindowOwnerPID as String] as? pid_t != ProcessInfo.processInfo.processIdentifier else { return nil }
+        return snapshot(info)
     }
 
     static func current(_ window: Snapshot) -> Snapshot? {

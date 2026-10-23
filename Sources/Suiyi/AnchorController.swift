@@ -13,6 +13,8 @@ enum ActionKind {
 final class AnchorController: NSObject {
     var onPick: (@MainActor (ActionKind) -> Void)?
     var onCopy: (@MainActor () -> Void)?
+    /// 0.2.1.k.11: called after the button appears or goes (the global key monitor follows it).
+    var onVisibilityChange: (@MainActor () -> Void)?
     private(set) var referencePoint = NSPoint.zero
 
     private static let bubbleSize: CGFloat = 30
@@ -77,12 +79,15 @@ final class AnchorController: NSObject {
         panel.invalidateShadow()
         panel.orderFrontRegardless()
         scheduleHide()
+        onVisibilityChange?()
     }
 
     func hide() {
         hideTask?.cancel()
         hideTask = nil
+        let wasVisible = panel.isVisible
         panel.orderOut(nil)
+        if wasVisible { onVisibilityChange?() }
     }
 
     private func scheduleHide() {
