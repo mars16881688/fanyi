@@ -148,3 +148,60 @@ struct SecondaryClickTests {
         #expect(counter.primary == 0)
     }
 }
+
+@Suite("Try Omarchy exclusion")
+struct TryOmarchyExclusionTests {
+    @Test("Excluded by default; added once to a saved list, keeping what is there")
+    func excludedList() {
+        let id = AppSettings.tryOmarchyBundleID
+        #expect(AppSettings.parseExcluded(AppSettings.defaultExcluded).contains(id))
+        #expect(AppSettings.adding(id, toExcluded: "com.a.one") == "com.a.one,dev.tryomarchy.native")
+        #expect(AppSettings.adding(id, toExcluded: " com.a.one，com.b.two\n") == "com.a.one，com.b.two,dev.tryomarchy.native")
+        #expect(AppSettings.adding(id, toExcluded: "  ") == "dev.tryomarchy.native")
+        #expect(AppSettings.adding(id, toExcluded: "com.a.one, DEV.TryOmarchy.native") == "com.a.one, DEV.TryOmarchy.native")
+    }
+
+    @Test("The menu toggle takes an app off the list without touching the others")
+    func removing() {
+        #expect(AppSettings.removing("dev.tryomarchy.native", fromExcluded: "com.a.one， DEV.tryomarchy.native\ncom.b.two") == "com.a.one,com.b.two")
+        #expect(AppSettings.removing("dev.tryomarchy.native", fromExcluded: "com.a.one") == "com.a.one")
+        #expect(AppSettings.removing("dev.tryomarchy.native", fromExcluded: "dev.tryomarchy.native").isEmpty)
+    }
+
+    @Test("Synthetic ⌘C presses and releases ⌘ around the key")
+    @MainActor
+    func shortcutSequence() {
+        let steps = Clipboard.shortcutSequence(8).map { "\($0.key) \($0.down ? "down" : "up") \($0.flags.contains(.maskCommand) ? "⌘" : "-")" }
+        #expect(steps == ["55 down ⌘", "8 down ⌘", "8 up ⌘", "55 up -"])
+        #expect(Clipboard.shortcutSequence(8).last?.flags.isEmpty == true)
+    }
+}
+
+@Suite("Read on click")
+struct ReadOnClickTests {
+    private func window(_ number: CGWindowID, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat = 800, _ h: CGFloat = 600) -> WindowProbe.Snapshot {
+        WindowProbe.Snapshot(number: number, bounds: CGRect(x: x, y: y, width: w, height: h))
+    }
+
+    @Test("A moved or resized window is not a text selection")
+    func windowMoved() {
+        #expect(WindowProbe.moved(window(7, 100, 100), window(7, 140, 120)))
+        #expect(WindowProbe.moved(window(7, 100, 100), window(7, 100, 100, 900, 600)))
+        #expect(!WindowProbe.moved(window(7, 100, 100), window(7, 100, 100)))
+        #expect(!WindowProbe.moved(window(7, 100, 100), window(7, 100.3, 100)))
+        #expect(!WindowProbe.moved(window(7, 100, 100), window(8, 300, 300)))
+        #expect(!WindowProbe.moved(nil, window(7, 100, 100)))
+        #expect(!WindowProbe.moved(window(7, 100, 100), nil))
+    }
+
+    @Test("Scroll bars, sliders and dividers are not text")
+    @MainActor
+    func nonTextRoles() {
+        for role in ["AXScrollBar", "AXValueIndicator", "AXSlider", "AXSplitter"] {
+            #expect(SelectionReader.nonTextRoles.contains(role))
+        }
+        for role in ["AXStaticText", "AXTextArea", "AXGroup", "AXWebArea", "AXUnknown"] {
+            #expect(!SelectionReader.nonTextRoles.contains(role))
+        }
+    }
+}
