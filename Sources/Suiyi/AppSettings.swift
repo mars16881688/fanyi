@@ -5,7 +5,9 @@ import Foundation
 enum AppSettings {
     static let defaultBaseURL = "https://api.deepseek.com/v1"
     static let defaultModel = "deepseek-chat"
-    static let defaultExcluded = "com.apple.keychainaccess,com.1password.1password,com.agilebits.onepassword7,dev.tryomarchy.native"
+    /// Password apps (Keychain Access, 1Password, …) are blocked by SensitiveGuard whatever this list
+    /// says, so the default only holds what matters beyond that (0.2.1.k.13).
+    static let defaultExcluded = "dev.tryomarchy.native"
 
     private enum Key {
         static let baseURL = "baseURL"
@@ -183,7 +185,19 @@ enum AppSettings {
         set { store.set(newValue, forKey: Key.excluded) }
     }
 
-    static var excludedBundleIDs: Set<String> { parseExcluded(excludedRaw) }
+    private static let excludedLock = NSLock()
+    nonisolated(unsafe) private static var excludedCache: (raw: String, set: Set<String>)?
+
+    /// Parsed once per change of the stored list, not on every gesture (0.2.1.k.13).
+    static var excludedBundleIDs: Set<String> {
+        let raw = excludedRaw
+        excludedLock.lock()
+        defer { excludedLock.unlock() }
+        if let cache = excludedCache, cache.raw == raw { return cache.set }
+        let set = parseExcluded(raw)
+        excludedCache = (raw, set)
+        return set
+    }
 
     /// Comma (half- or full-width), newline or whitespace separated, case-insensitive.
     static func parseExcluded(_ raw: String) -> Set<String> {

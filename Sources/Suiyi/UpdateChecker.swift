@@ -44,7 +44,7 @@ enum UpdateChecker {
     static func fetchLatest() async throws -> ReleaseInfo {
         var request = URLRequest(url: feedURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request, delegate: NoRedirects.shared)
+        let (data, response) = try await LLMClient.session.data(for: request, delegate: NoRedirects.shared)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }

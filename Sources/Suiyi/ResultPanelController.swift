@@ -680,8 +680,10 @@ final class ResultPanelController: NSObject {
         relayout(keepPosition: true)
     }
 
-    /// A short message that disappears by itself.
+    /// A short message that disappears by itself. 0.2.1.k.13: if a translation or reply is still
+    /// streaming into this card, it is cancelled first (the notice replaces the card).
     func showNotice(_ message: String, at point: NSPoint) {
+        if streaming || replyStreaming { onClose?() }
         present(kind: .translate, header: L("随译", "Suiyi", "Suiyi"), editable: false, shortPhrase: false, at: point,
                 showsTabs: false)
         showError(message)
@@ -773,6 +775,7 @@ final class ResultPanelController: NSObject {
         item.setString(text, forType: .string)
         item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
         item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        item.setString("", forType: SensitiveGuard.ownPasteboardType)
         pasteboard.writeObjects([item])
     }
 

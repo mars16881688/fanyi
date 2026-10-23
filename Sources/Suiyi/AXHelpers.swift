@@ -31,12 +31,6 @@ enum AX {
         return (value as! AXValue)
     }
 
-    static func range(_ element: AXUIElement, _ attribute: String) -> CFRange? {
-        guard let value = axValue(element, attribute), AXValueGetType(value) == .cfRange else { return nil }
-        var range = CFRange(location: 0, length: 0)
-        return AXValueGetValue(value, .cfRange, &range) ? range : nil
-    }
-
     static func point(_ element: AXUIElement, _ attribute: String) -> CGPoint? {
         guard let value = axValue(element, attribute), AXValueGetType(value) == .cgPoint else { return nil }
         var point = CGPoint.zero

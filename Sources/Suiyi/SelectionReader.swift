@@ -89,8 +89,7 @@ final class SelectionReader {
     /// - target: what the guards approved (see `focusTarget()`); nothing is read, and no ⌘C is
     ///   sent, when the focus now belongs to any other process.
     func read(allowClipboard: Bool, gesturePoints: [NSPoint]?, target: FocusTarget) async -> CapturedSelection? {
-        lastMiss = nil
-        guard AXIsProcessTrusted() else { return nil }
+        lastMiss = nil   // trust was checked by focusTarget(), which every caller runs first
         // Some app is collecting a password (or "Secure Keyboard Entry" is on).
         if IsSecureEventInputEnabled() { lastMiss = .secureInput; return nil }
         guard let app = NSRunningApplication(processIdentifier: target.pid) else { lastMiss = .focusChanged; return nil }
@@ -121,7 +120,7 @@ final class SelectionReader {
         var viaAX = false
         if let element = focused,
            let selected = AX.string(element, kAXSelectedTextAttribute),
-           !selected.trimmed.isEmpty {
+           selected.contains(where: { !$0.isWhitespace }) {
             if let points = gesturePoints, let frame = AX.cocoaFrame(of: element) {
                 let hitArea = frame.insetBy(dx: -8, dy: -8)
                 if !points.contains(where: { hitArea.contains($0) }) {
@@ -143,11 +142,9 @@ final class SelectionReader {
             return nil
         }
 
-        var cleaned = text.trimmed
+        // 0.2.1.k.13: cut before trimming, so a select-all of a long document is not copied whole.
+        let cleaned = String(String(text.prefix(Self.maxLength + 2000)).trimmed.prefix(Self.maxLength))
         guard !cleaned.isEmpty else { lastMiss = .copyFailed; return nil }
-        if cleaned.count > Self.maxLength {
-            cleaned = String(cleaned.prefix(Self.maxLength))
-        }
 
         return CapturedSelection(
             text: cleaned,

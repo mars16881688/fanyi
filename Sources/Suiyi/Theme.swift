@@ -104,7 +104,6 @@ final class RoundedMaterialView: NSVisualEffectView {
 @MainActor
 final class RoundedSurfaceView: NSView {
     var radius: CGFloat = 12
-    var accent = false
 
     override var allowsVibrancy: Bool { false }
 
@@ -112,11 +111,7 @@ final class RoundedSurfaceView: NSView {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: radius, yRadius: radius)
-        if accent {
-            NSColor.controlAccentColor.setFill()
-        } else {
-            (dark ? NSColor.white.withAlphaComponent(0.07) : NSColor.white.withAlphaComponent(0.38)).setFill()
-        }
+        (dark ? NSColor.white.withAlphaComponent(0.07) : NSColor.white.withAlphaComponent(0.38)).setFill()
         path.fill()
         (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.white.withAlphaComponent(0.7)).setStroke()
         path.lineWidth = 0.5

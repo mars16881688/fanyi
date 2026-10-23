@@ -24,8 +24,10 @@ enum AgentIntegration {
         return candidate
     }
 
-    // Reject symlink escapes, another user's home, and any checkout (including worktrees).
-    static func validateUserFile(_ url: URL) throws {
+    // Reject symlink escapes, another user's home, and (for agent files) any checkout, including
+    // worktrees. 0.2.1.k.13: Suiyi's own ~/.suiyi/profile.md skips the checkout rule, so a home
+    // folder kept in Git (dotfiles) does not silently hide the profile from My style.
+    static func validateUserFile(_ url: URL, rejectRepositories: Bool = true) throws {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.resolvingSymlinksInPath().standardizedFileURL
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
@@ -33,6 +35,7 @@ enum AgentIntegration {
             throw NSError(domain: "Suiyi.AgentIntegration", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: L("接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。", "The file must be inside your home folder. Check CODEX_HOME and symlinks.", "ファイルはホームフォルダ内にある必要があります。CODEX_HOME とシンボリックリンクを確認してください。")])
         }
+        guard rejectRepositories else { return }
         var directory = resolved.deletingLastPathComponent()
         while directory.path != "/" {
             if fm.fileExists(atPath: directory.appendingPathComponent(".git").path) {
@@ -43,13 +46,13 @@ enum AgentIntegration {
         }
     }
 
-    static var files: [(name: String, url: URL, content: String)] {
+    /// The agent files a pre-0.2.1.k.01 version may have written a marked block into. 0.2.1.k.13:
+    /// connecting is gone for good; only removing that block remains.
+    static var files: [(name: String, url: URL)] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
-            ("Codex", codexHome.appendingPathComponent("AGENTS.md"),
-             "## 我的个人风格（来自随译）\n\nWhen writing English or Chinese text on my behalf (messages, emails, PR descriptions, docs), first read `~/.suiyi/profile.md` if it exists and match my tone, length and wording habits described there. Do not quote it verbatim."),
-            ("Claude Code", home.appendingPathComponent(".claude/CLAUDE.md"),
-             "## 我的个人风格（来自随译）\n\n请参考以下随译用户画像，在代我写作时匹配我的个人风格。\n\n@~/.suiyi/profile.md")
+            ("Codex", codexHome.appendingPathComponent("AGENTS.md")),
+            ("Claude Code", home.appendingPathComponent(".claude/CLAUDE.md")),
         ]
     }
 
@@ -67,41 +70,6 @@ enum AgentIntegration {
         var result = text
         while let range = range(in: result) { result.removeSubrange(range) }
         return result
-    }
-
-    static func status() -> [Bool] {
-        files.map { file in
-            guard (try? validateUserFile(file.url)) != nil,
-                  let text = try? String(contentsOf: file.url, encoding: .utf8) else { return false }
-            return range(in: text) != nil
-        }
-    }
-
-    static func install() throws {
-        for file in files { try validateUserFile(file.url) }
-        for file in files {
-            let fm = FileManager.default
-            try fm.createDirectory(at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let old = fm.fileExists(atPath: file.url.path) ? try String(contentsOf: file.url, encoding: .utf8) : ""
-            let block = begin + "\n" + file.content + "\n" + end
-            var updated = old
-            if let range = range(in: old) { updated.replaceSubrange(range, with: block) }
-            else { updated += (old.isEmpty ? "" : "\n\n") + block }
-            if updated != old { try LocalFile.write(updated, to: file.url) }
-        }
-    }
-
-    /// Rewrites pre-rename Fanyi blocks in place. Files without one are left untouched.
-    static func migrateLegacyBlocks() throws {
-        for file in files {
-            guard FileManager.default.fileExists(atPath: file.url.path) else { continue }
-            try validateUserFile(file.url)
-            let old = try String(contentsOf: file.url, encoding: .utf8)
-            guard let legacy = range(in: old, begin: legacyBegin, end: legacyEnd) else { continue }
-            var updated = old
-            updated.replaceSubrange(legacy, with: begin + "\n" + file.content + "\n" + end)
-            try LocalFile.write(updated, to: file.url)
-        }
     }
 
     static func remove() throws {
