@@ -17,8 +17,8 @@ enum Clipboard {
     /// 0.2.1.k.12: a copy of the clipboard that can be put back, or nil when it cannot be copied
     /// cheaply (images, media, PDFs, file promises, or more than a few MB). Reading such data would
     /// make the source app render every format it promised, just to write it back.
-    static func snapshot() -> Snapshot? {
-        let items = NSPasteboard.general.pasteboardItems ?? []
+    static func snapshot(of pasteboard: NSPasteboard = .general) -> Snapshot? {
+        let items = pasteboard.pasteboardItems ?? []
         var total = 0
         var result: Snapshot = []
         for item in items {
@@ -45,8 +45,7 @@ enum Clipboard {
         return true
     }
 
-    static func restore(_ snapshot: Snapshot) {
-        let pasteboard = NSPasteboard.general
+    static func restore(_ snapshot: Snapshot, to pasteboard: NSPasteboard = .general) {
         // 0.2.1.k.01: put the user's clipboard back on this Mac only (no Universal Clipboard hand-off).
         pasteboard.prepareForNewContents(with: .currentHostOnly)
         var items: [NSPasteboardItem] = []
@@ -80,12 +79,16 @@ enum Clipboard {
         }
     }
 
+    /// Tags Suiyi's own key events, so a ⌘C the user types can be told apart from ours.
+    nonisolated static let syntheticMarker: Int64 = 0x5375_6979   // "Suiy"
+
     static func postShortcut(_ key: CGKeyCode) async {
         await waitForModifiersUp()
         let source = CGEventSource(stateID: .combinedSessionState)
         let events = shortcutSequence(key).compactMap { step -> CGEvent? in
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: step.key, keyDown: step.down) else { return nil }
             event.flags = step.flags
+            event.setIntegerValueField(.eventSourceUserData, value: syntheticMarker)
             return event
         }
         guard events.count == 4 else { return }   // all or nothing: never leave ⌘ down
@@ -94,33 +97,49 @@ enum Clipboard {
 
     /// Sends ⌘C to the frontmost app, waits up to 1 s for the pasteboard to
     /// change, reads the string and puts the user's original clipboard back.
-    static func copySelection() async -> String? {
-        let pasteboard = NSPasteboard.general
+    /// 0.2.7: put back only if nothing wrote to the clipboard after our copy. A user who selects
+    /// and presses ⌘C at once used to get their copy overwritten by the older clipboard
+    /// (fanyi-site#14: "pasting brings in a lot of other text").
+    static func copySelection(on pasteboard: NSPasteboard = .general,
+                              settle: UInt64 = 30_000_000,
+                              copy: () async -> Void = { await postShortcut(copyKey) }) async -> String? {
         // 0.2.1.k.01: the clipboard holds something a password manager copied (and may be about
         // to auto-clear): leave it alone rather than copy over it and write it back.
         if SensitiveGuard.isSensitivePasteboard(types: (pasteboard.types ?? []).map(\.rawValue)) { return nil }
-        let saved = snapshot()
+        let saved = snapshot(of: pasteboard)
+        let watch = UserCopyWatch()
+        defer { watch.stop() }
         let before = pasteboard.changeCount
-        await postShortcut(copyKey)
+        await copy()
 
         // Slow apps get up to 1 s, so a late copy is still restored rather than left behind.
         let deadline = Date().addingTimeInterval(1.0)
         var changed = false
         while Date() < deadline {
-            try? await Task.sleep(nanoseconds: 20_000_000)
             if pasteboard.changeCount != before {
                 changed = true
                 break
             }
+            try? await Task.sleep(nanoseconds: 20_000_000)
         }
         guard changed else { return nil }
+        let ours = pasteboard.changeCount
         // Give the source app a moment to finish writing all representations.
-        try? await Task.sleep(nanoseconds: 30_000_000)
+        try? await Task.sleep(nanoseconds: settle)
         // 0.2.1.k.01: a password manager marked this copy as concealed/transient: do not use it.
         let types = (pasteboard.types ?? []).map(\.rawValue)
         let text = SensitiveGuard.isSensitivePasteboard(types: types) ? nil : pasteboard.string(forType: .string)
-        if let saved { restore(saved) }   // an uncopyable clipboard (an image, a file promise) is left as the app's ⌘C made it
+        if let saved, shouldRestore(ours: ours, now: pasteboard.changeCount, userPressedCopy: watch.userPressedCopy) {
+            restore(saved, to: pasteboard)
+        }
         return text
+    }
+
+    /// An uncopyable clipboard (an image, a file promise) is left as the app's ⌘C made it. So is a
+    /// clipboard written after our copy, or one the user copied to themselves while we waited: that
+    /// is the user's own ⌘C and must not be replaced by the older contents.
+    nonisolated static func shouldRestore(ours: Int, now: Int, userPressedCopy: Bool) -> Bool {
+        now == ours && !userPressedCopy
     }
 
     /// 0.2.1.k.06: a real ⌘C for the user (right-click on the button). The app's own copy stays on
@@ -161,5 +180,25 @@ enum Clipboard {
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         if let saved, pasteboard.changeCount == ours { restore(saved) }
         return true
+    }
+}
+
+/// Notices a ⌘C typed by the user while Suiyi waits for its own ⌘C to land.
+@MainActor
+private final class UserCopyWatch {
+    private(set) var userPressedCopy = false
+    private var monitor: Any?
+
+    init() {
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 8, event.modifierFlags.contains(.command),
+                  event.cgEvent?.getIntegerValueField(.eventSourceUserData) != Clipboard.syntheticMarker else { return }
+            MainActor.assumeIsolated { self?.userPressedCopy = true }
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
