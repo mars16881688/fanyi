@@ -2,10 +2,17 @@ import AppKit
 import ApplicationServices
 
 struct Capture {
-    let selection: CapturedSelection
+    var selection: CapturedSelection
     let context: AppContext
     /// The user confirmed a SensitiveGuard block by triggering again; never saved to history.
     var overridden = false
+}
+
+/// 0.2.1.k.10: a mouse selection that could not be read without the clipboard. The button is
+/// shown anyway, and ⌘C is sent only when the user clicks it.
+struct UnreadSelection {
+    let target: SelectionReader.FocusTarget
+    let points: [NSPoint]
 }
 
 @MainActor
@@ -19,10 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private var pauseItem: NSMenuItem?
+    private var excludeItem: NSMenuItem?
+    private var excludeTarget: (id: String, name: String)?
     private var accessibilityItem: NSMenuItem?
     /// 0.2.1.k.02: why the last mouse selection did or did not get a button (no selected text).
     private var diagnosisItem: NSMenuItem?
     private var lastSelectionNote = ""
+    private var lastSelectionDate: Date?
 
     private var reader: SelectionReader!
     private var monitor: SelectionMonitor!
@@ -32,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var paused = false
     private var pendingCapture: Capture?
+    private var pendingUnread: UnreadSelection?
     private var lastCapture: Capture?
     private var selectionGeneration = 0
     private var requestGeneration = 0
@@ -48,8 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var streamedText = ""
     private var streamedReply = ""
     private var requestTask: Task<Void, Never>?
-    private var keyMonitors: [Any] = []
-    private var trustPollTask: Task<Void, Never>?
+    private var localKeyMonitor: Any?
+    /// 0.2.1.k.11: installed only while the button or the card is on screen.
+    private var globalKeyMonitor: Any?
 
     // MARK: - Launch
 
@@ -57,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         LegacyMigration.runIfNeeded()
         AppSettings.registerDefaults()
         AppSettings.applyK02Defaults()
+        AppSettings.applyK09Defaults()
         paused = AppSettings.paused
 
         reader = SelectionReader()
@@ -67,6 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         anchor.onPick = { [weak self] kind in self?.anchorPicked(kind) }
         anchor.onCopy = { [weak self] in self?.copyPendingSelection() }
+        anchor.onVisibilityChange = { [weak self] in self?.updateGlobalKeyMonitor() }
+        result.onVisibilityChange = { [weak self] in self?.updateGlobalKeyMonitor() }
+        monitor.wantsWindowSnapshot = { [weak self] in
+            guard let self else { return false }
+            return !self.paused && AppSettings.showAnchor && AppSettings.mouseClipboardFallback && AXIsProcessTrusted()
+        }
         result.onReplyTranslate = { [weak self] text in self?.translateReply(text) }
         result.onSwitchKind = { [weak self] kind in self?.switchKind(kind) }
         result.onClose = { [weak self] in self?.closeResult() }
@@ -78,36 +97,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installStatusItem()
         monitor.start()
         registerHotKeys()
-        installKeyMonitors()
+        installLocalKeyMonitor()
         UpdateChecker.startAutomaticChecks()
 
         if !AXIsProcessTrusted() {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
-            startTrustPolling()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         monitor?.stop()
-        for m in keyMonitors { NSEvent.removeMonitor(m) }
-        keyMonitors.removeAll()
+        if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
+        if let globalKeyMonitor { NSEvent.removeMonitor(globalKeyMonitor) }
     }
 
-    /// Once the user grants Accessibility, re-install the key monitors (global
-    /// key monitors registered before trust may stay silent).
-    private func startTrustPolling() {
-        trustPollTask?.cancel()
-        trustPollTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                if AXIsProcessTrusted() {
-                    self?.installKeyMonitors()
-                    return
-                }
-            }
-        }
-    }
 
     // MARK: - Menus
 
@@ -173,6 +177,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let pause = makeItem(pauseTitle, #selector(togglePause(_:)))
         menu.addItem(pause)
         pauseItem = pause
+        let exclude = makeItem("", #selector(toggleExcludeFrontApp(_:)))
+        exclude.isHidden = true
+        menu.addItem(exclude)
+        excludeItem = exclude
         let access = makeItem(L("授予辅助功能权限…", "Grant Accessibility Access…", "アクセシビリティを許可…", "손쉬운 사용 권한 허용…"), #selector(openAccessibilitySettings(_:)))
         access.isHidden = AXIsProcessTrusted()
         menu.addItem(access)
@@ -199,14 +207,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         pauseItem?.title = pauseTitle
         accessibilityItem?.isHidden = AXIsProcessTrusted()
-        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：", "최근 선택: ") + lastSelectionNote
+        let time = lastSelectionDate.map { " · " + DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .medium) } ?? ""
+        diagnosisItem?.title = L("最近一次划词：", "Last selection: ", "直近の選択：", "최근 선택: ") + lastSelectionNote + time
         diagnosisItem?.isHidden = lastSelectionNote.isEmpty
+        // 0.2.1.k.09: the app in front when the menu opens (opening the menu does not activate Suiyi).
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.processIdentifier != ProcessInfo.processInfo.processIdentifier, let id = front.bundleIdentifier {
+            let name = front.localizedName ?? id
+            excludeTarget = (id, name)
+            excludeItem?.title = L("在「\(name)」中停用随译", "Turn Off Suiyi in \(name)", "「\(name)」で Suiyi をオフ", "「\(name)」에서 Suiyi 끄기")
+            excludeItem?.state = AppSettings.isExcluded(bundleID: id) ? .on : .off
+            excludeItem?.isHidden = false
+        } else {
+            excludeTarget = nil
+            excludeItem?.isHidden = true
+        }
     }
 
     /// Records the outcome of a mouse selection for the menu's diagnosis line; never the text itself.
+    /// The time is formatted when the menu opens, not on every gesture (0.2.1.k.13).
     private func noteSelection(_ message: String, app: NSRunningApplication? = nil) {
-        let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        lastSelectionNote = [message, app?.localizedName, time].compactMap { $0 }.joined(separator: " · ")
+        lastSelectionNote = [message, app?.localizedName].compactMap { $0 }.joined(separator: " · ")
+        lastSelectionDate = Date()
     }
 
     private func note(for reason: SensitiveGuard.Reason) -> String {
@@ -226,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .focusChanged: return L("焦点已切到其他应用", "focus moved to another app", "フォーカスが別のアプリに移動", "포커스가 다른 앱으로 이동함")
         case .secureField: return L("选中的是密码框", "the selection is in a password field", "パスワード欄の選択", "선택한 내용이 비밀번호 칸에 있음")
         case .notAtPointer: return L("读到的选区不在鼠标位置", "the selection found is not where the pointer is", "選択範囲がポインタの位置にない", "찾은 선택 영역이 포인터 위치와 다름")
-        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 开启模拟 ⌘C，或按 ⌥⌘T", "couldn't read the selection: turn on ⌘C in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで ⌘C をオン、または ⌥⌘T", "선택한 내용을 읽지 못함: 설정 › 보안에서 ⌘C를 켜거나 ⌥⌘T를 누르세요")
+        case .unreadableWithoutCopy: return L("读不到选中文字：可在 设置 › 安全 打开「读不到时也显示按钮」，或按 ⌥⌘T", "couldn't read the selection: turn on the button for unreadable text in Settings › Security, or press ⌥⌘T", "選択を読み取れず：設定 › セキュリティで「読めないときもボタンを表示」をオン、または ⌥⌘T", "선택한 내용을 읽지 못함: 설정 › 보안에서 「읽을 수 없을 때도 버튼 표시」를 켜거나 ⌥⌘T를 누르세요")
         case .copyFailed: return L("模拟 ⌘C 没有拿到文字", "⌘C returned no text", "⌘C でテキストを取得できず", "⌘C로 텍스트를 가져오지 못함")
         case nil: return L("没有读到文字", "no text read", "テキストを読み取れず", "읽은 텍스트 없음")
         }
@@ -246,6 +268,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AppSettings.paused = paused
         if paused { anchor.hide() }
         pauseItem?.title = pauseTitle
+    }
+
+    /// Adds the app to the exclusion list, or takes it off again (same list as Settings › 排除的应用).
+    @objc private func toggleExcludeFrontApp(_ sender: Any?) {
+        guard let target = excludeTarget else { return }
+        let exclude = !AppSettings.isExcluded(bundleID: target.id)
+        AppSettings.setExcluded(target.id, exclude)
+        if exclude { anchor.hide() }
     }
 
     @objc private func openSettings(_ sender: Any?) {
@@ -278,7 +308,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
-        startTrustPolling()
     }
 
     // MARK: - Hot keys & key monitors
@@ -296,29 +325,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func installKeyMonitors() {
-        for m in keyMonitors { NSEvent.removeMonitor(m) }
-        keyMonitors.removeAll()
-
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
-            let code = event.keyCode
-            MainActor.assumeIsolated {
-                guard let delegate = self else { return }
-                _ = delegate.handleKeyDown(code: code, global: true)
-            }
-        }) {
-            keyMonitors.append(global)
-        }
-
-        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+    private func installLocalKeyMonitor() {
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             let code = event.keyCode
             let handled = MainActor.assumeIsolated { () -> Bool in
                 guard let delegate = self else { return false }
                 return delegate.handleKeyDown(code: code, global: false)
             }
             return handled ? nil : event
-        }) {
-            keyMonitors.append(local)
+        })
+    }
+
+    /// The global key monitor (Esc closes, any key hides the button) is only needed while something
+    /// of ours is on screen. 0.2.1.k.11: before, every keystroke in every app woke Suiyi all day.
+    private func updateGlobalKeyMonitor() {
+        let wanted = anchor.isVisible || result.isVisible
+        if wanted, globalKeyMonitor == nil {
+            globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+                let code = event.keyCode
+                MainActor.assumeIsolated {
+                    guard let delegate = self else { return }
+                    _ = delegate.handleKeyDown(code: code, global: true)
+                }
+            })
+        } else if !wanted, let globalKeyMonitor {
+            NSEvent.removeMonitor(globalKeyMonitor)
+            self.globalKeyMonitor = nil
         }
     }
 
@@ -354,6 +386,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// What the checks before any read found. 0.2.1.k.13: the mouse, the button click and the hot key
+    /// all run these same checks in the same order (before, the click path skipped the exclusion
+    /// list); each entry point only decides how to tell the user.
+    private enum PreRead {
+        case ok(title: String?)
+        case excluded
+        case blocked(SensitiveGuard.Reason, title: String?)
+    }
+
+    /// Exclusion list, then password apps and pages, terminals and editors, and secret-looking titles.
+    private func preReadCheck(_ target: SelectionReader.FocusTarget) -> PreRead {
+        if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) { return .excluded }
+        let title = ContextCollector.windowTitle(pid: target.pid)
+        if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
+                                                   allowCodeApps: AppSettings.allowInCodeApps) {
+            return .blocked(reason, title: title)
+        }
+        return .ok(title: title)
+    }
+
+    private static var excludedNotice: String {
+        L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。", "제외된 앱이라 선택한 내용을 읽지 않았습니다.")
+    }
+
     /// The process that really has keyboard focus (never Suiyi itself).
     private func foreignFocus() -> SelectionReader.FocusTarget? {
         let own = ProcessInfo.processInfo.processIdentifier
@@ -371,38 +427,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Selecting text inside our own result card (e.g. the reply box) is not
         // a selection in the foreign app.
         if result.isVisible && result.frame.contains(gesture.up) { return }
+        // 0.2.1.k.12: the checks that need no Accessibility call come first. A moved or resized
+        // window, an excluded app or a password app gets no AX traffic at all.
+        if WindowProbe.moved(gesture.startWindow, gesture.startWindow.flatMap(WindowProbe.current)) {
+            noteSelection(L("拖动的是窗口，不出按钮", "a window was moved, no button", "ウィンドウの移動のためボタンなし", "윈도우를 옮긴 것이라 버튼 없음"))
+            return
+        }
+        let front = NSWorkspace.shared.frontmostApplication
+        if let frontID = front?.bundleIdentifier, front?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            if AppSettings.isExcluded(bundleID: frontID) {
+                noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ", "제외 목록에 있는 앱"), app: front)
+                return
+            }
+            if SensitiveGuard.isPasswordApp(frontID) {
+                noteSelection(note(for: .passwordApp), app: front)
+                return
+            }
+        }
         guard let target = foreignFocus() else {
             noteSelection(L("没有找到有输入焦点的应用", "no app with keyboard focus found", "フォーカスのあるアプリが見つからず", "키보드 포커스를 가진 앱을 찾지 못함"))
             return
         }
         let bundleID = target.app?.bundleIdentifier
-        if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
-            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ", "제외 목록에 있는 앱"), app: target.app)
-            return
-        }
-
         // 0.2.1.k.01: password apps and pages, terminals/editors (unless allowed) and windows whose
         // title suggests credentials get no button, and nothing is read from them.
-        let title = ContextCollector.windowTitle(pid: target.pid)
-        if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title, pageURL: target.pageURL,
-                                                   allowCodeApps: AppSettings.allowInCodeApps) {
+        let title: String?
+        switch preReadCheck(target) {
+        case .excluded:
+            noteSelection(L("应用在排除名单里", "app is in the excluded list", "除外リストのアプリ", "제외 목록에 있는 앱"), app: target.app)
+            return
+        case .blocked(let reason, _):
             noteSelection(note(for: reason), app: target.app)
             return
+        case .ok(let windowTitle):
+            title = windowTitle
         }
 
-        // Clipboard fallback only when turned on in Settings, only for real drags (not
-        // double-clicks), and never in apps where ⌘C would copy something other than text.
+        // 0.2.1.k.10: a mouse gesture never sends keys. The selection is read through Accessibility
+        // only; where that finds nothing (WeChat, Telegram), a drag may still get the button, and
+        // ⌘C is sent when the user clicks it. Never in apps where ⌘C would copy files, not text.
         let bundle = bundleID?.lowercased() ?? ""
-        let allowClipboard = AppSettings.mouseClipboardFallback && gesture.kind == .drag
-            && !Self.noClipboardFallbackOnMouse.contains(bundle)
+        let mayReadOnClick = AppSettings.mouseClipboardFallback && gesture.kind == .drag
+            && !Self.noClipboardFallbackOnMouse.contains(bundle) && !SelectionReader.sendsNoSyntheticKeys(bundle)
 
         selectionGeneration += 1
         let generation = selectionGeneration
         Task { @MainActor in
-            guard let selection = await self.reader.read(allowClipboard: allowClipboard,
+            guard let selection = await self.reader.read(allowClipboard: false,
                                                          gesturePoints: [gesture.down, gesture.up],
                                                          target: target) else {
-                if generation == self.selectionGeneration { self.noteSelection(self.note(for: self.reader.lastMiss), app: target.app) }
+                guard generation == self.selectionGeneration, !self.paused else { return }
+                guard mayReadOnClick, self.reader.lastMiss == .unreadableWithoutCopy else {
+                    self.noteSelection(self.note(for: self.reader.lastMiss), app: target.app)
+                    return
+                }
+                if self.reader.isNonTextControl(at: gesture.down, pid: target.pid) {
+                    self.noteSelection(L("拖动的是滚动条或滑块，不出按钮", "a scroll bar or slider was dragged, no button",
+                                         "スクロールバー等の操作のためボタンなし", "스크롤 막대나 슬라이더를 끈 것이라 버튼 없음"), app: target.app)
+                    return
+                }
+                self.noteSelection(L("读不到文字，已弹出按钮，点了才读取", "text not readable; button shown, read on click",
+                                     "読み取れず：ボタンを表示（クリック時に読み取り）", "읽지 못함: 버튼 표시(누르면 읽음)"), app: target.app)
+                self.pendingCapture = nil
+                self.pendingUnread = UnreadSelection(target: target, points: [gesture.down, gesture.up])
+                self.anchor.show(at: gesture.up)
                 return
             }
             guard generation == self.selectionGeneration, !self.paused else { return }
@@ -413,8 +501,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             self.noteSelection(L("已弹出按钮", "button shown", "ボタンを表示", "버튼 표시됨"), app: target.app)
             let context = ContextCollector.collect(for: selection, windowTitle: title)
+            self.pendingUnread = nil
             self.pendingCapture = Capture(selection: selection, context: context)
             self.anchor.show(at: gesture.up)
+        }
+    }
+
+    /// 0.2.1.k.10: the user clicked a button shown without text. Only now is ⌘C sent, to the same app
+    /// as before; the window check runs again, and the content check comes before anything is sent.
+    private func readOnClick(_ unread: UnreadSelection, kind: ActionKind, at point: NSPoint) {
+        pendingUnread = nil
+        selectionGeneration += 1
+        let generation = selectionGeneration
+        Task { @MainActor in
+            guard let target = self.foreignFocus(), target.pid == unread.target.pid else {
+                self.result.showNotice(L("焦点已切到其他应用，没有读取。", "The focus moved to another app; nothing was read.",
+                                         "フォーカスが別のアプリに移ったため、読み取りませんでした。", "포커스가 다른 앱으로 옮겨져 읽지 않았습니다."), at: point)
+                return
+            }
+            let title: String?
+            switch self.preReadCheck(target) {
+            case .excluded:
+                self.result.showNotice(Self.excludedNotice, at: point)
+                return
+            case .blocked(let reason, let blockedTitle):
+                self.block(SensitiveGuard.ConfirmGate.Key(reason: reason, pid: target.pid, title: blockedTitle, text: nil), at: point)
+                return
+            case .ok(let windowTitle):
+                title = windowTitle
+            }
+            let selection = await self.reader.read(allowClipboard: true, gesturePoints: unread.points, target: target)
+            guard generation == self.selectionGeneration else { return }   // the user moved on during the ⌘C wait
+            guard let selection else {
+                self.result.showNotice(L("没有检测到选中的文字。", "No selected text found.", "選択されたテキストが見つかりません。", "선택한 텍스트를 찾지 못했습니다."), at: point)
+                return
+            }
+            if SensitiveGuard.looksSensitive(selection.text) {
+                self.block(SensitiveGuard.ConfirmGate.Key(reason: .sensitiveText, pid: target.pid, title: title,
+                                                          text: selection.text), at: point)
+                return
+            }
+            let context = ContextCollector.collect(for: selection, windowTitle: title)
+            self.run(kind, capture: Capture(selection: selection, context: context), at: point)
         }
     }
 
@@ -428,6 +556,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// ⌘C in the app (full text and formatting). If the app has lost focus meanwhile, the text Suiyi
     /// read is copied instead (trimmed, at most 4,000 characters). Nothing is sent to the model.
     private func copyPendingSelection() {
+        if let unread = pendingUnread {
+            // Nothing was read: the app's own ⌘C is the only copy there is.
+            Task { @MainActor in
+                if NSWorkspace.shared.frontmostApplication?.processIdentifier == unread.target.pid {
+                    _ = await Clipboard.copyForUser()
+                }
+            }
+            return
+        }
         guard let capture = pendingCapture else { return }
         Task { @MainActor in
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == capture.selection.pid,
@@ -439,6 +576,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func anchorPicked(_ kind: ActionKind) {
+        if let unread = pendingUnread {
+            readOnClick(unread, kind: kind, at: anchor.referencePoint)
+            return
+        }
         guard let capture = pendingCapture else { return }
         run(kind, capture: capture, at: anchor.referencePoint)
     }
@@ -457,7 +598,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard AXIsProcessTrusted() else {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
-            startTrustPolling()
             result.showNotice(L("需要辅助功能权限：系统设置 › 隐私与安全性 › 辅助功能，打开随译。",
                                  "Accessibility access is needed: System Settings › Privacy & Security › Accessibility, turn on Suiyi.",
                                  "アクセシビリティの許可が必要です：システム設定 › プライバシーとセキュリティ › アクセシビリティ で Suiyi をオンにしてください。", "손쉬운 사용 권한이 필요합니다: 시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용에서 Suiyi를 켜세요."), at: point)
@@ -469,23 +609,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try? await Task.sleep(nanoseconds: delayNanos)
             }
             guard let target = self.foreignFocus() else { return }
-            if target.bundleIDs.contains(where: { AppSettings.isExcluded(bundleID: $0) }) {
-                self.result.showNotice(L("当前应用在排除列表中，未读取选中文字。", "This app is excluded; the selection was not read.", "このアプリは除外リストにあるため、選択テキストを読み取りませんでした。", "제외된 앱이라 선택한 내용을 읽지 않았습니다."), at: point)
-                return
-            }
             // 0.2.1.k.01: app, page and window checks come before any read (and before any ⌘C);
             // the content check comes after the read and before anything is sent. Each block needs
             // its own confirmation, and a window-level confirmation never skips the content check.
             let pid = target.pid
-            let title = ContextCollector.windowTitle(pid: pid)
+            let title: String?
             var overridden = false
-            if let reason = SensitiveGuard.blockReason(bundleIDs: target.bundleIDs, windowTitle: title,
-                                                       pageURL: target.pageURL, allowCodeApps: AppSettings.allowInCodeApps) {
-                let key = SensitiveGuard.ConfirmGate.Key(reason: reason, pid: pid, title: title, text: nil)
+            switch self.preReadCheck(target) {
+            case .excluded:
+                self.result.showNotice(Self.excludedNotice, at: point)
+                return
+            case .blocked(let reason, let blockedTitle):
+                let key = SensitiveGuard.ConfirmGate.Key(reason: reason, pid: pid, title: blockedTitle, text: nil)
                 guard self.confirmGate.isConfirmed(key) else { self.block(key, at: point); return }
                 overridden = true
+                title = blockedTitle
+            case .ok(let windowTitle):
+                title = windowTitle
             }
-            guard let selection = await self.reader.read(allowClipboard: true, gesturePoints: nil, target: target) else {
+            let noKeys = SelectionReader.sendsNoSyntheticKeys(target.app?.bundleIdentifier)
+            var selection = await self.reader.read(allowClipboard: !noKeys, gesturePoints: nil, target: target)
+            if selection == nil, noKeys, self.reader.lastMiss == .unreadableWithoutCopy {
+                // 0.2.1.k.12: the guest got no ⌘C; what the user copied inside it is on the clipboard.
+                selection = self.clipboardSelection(target: target)
+                guard selection != nil else {
+                    self.result.showNotice(L("虚拟机或远程桌面里不模拟按键。先在里面复制（⌘C 或 Ctrl+C），再按 ⌥⌘T 翻译剪贴板里的文字。",
+                                             "No synthetic keys in a VM or remote desktop. Copy inside it first (⌘C or Ctrl+C), then press ⌥⌘T to translate the clipboard.",
+                                             "仮想マシンやリモートデスクトップにはキーを送りません。先に中でコピー（⌘C か Ctrl+C）してから ⌥⌘T を押すと、クリップボードの文字を翻訳します。", "가상 머신이나 원격 데스크톱에는 키를 보내지 않습니다. 먼저 그 안에서 복사(⌘C 또는 Ctrl+C)한 뒤 ⌥⌘T를 누르면 클립보드의 텍스트를 번역합니다."), at: point)
+                    return
+                }
+            }
+            guard let selection else {
                 self.result.showNotice(L("没有检测到选中的文字。", "No selected text found.", "選択されたテキストが見つかりません。", "선택한 텍스트를 찾지 못했습니다."), at: point)
                 return
             }
@@ -500,6 +654,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// The clipboard's text as a selection of `target` (VMs and remote desktops only). A password
+    /// manager's item is never used.
+    private func clipboardSelection(target: SelectionReader.FocusTarget) -> CapturedSelection? {
+        let pasteboard = NSPasteboard.general
+        guard !SensitiveGuard.isSensitivePasteboard(types: (pasteboard.types ?? []).map(\.rawValue)),
+              let app = target.app, let text = pasteboard.string(forType: .string)?.trimmed, !text.isEmpty else { return nil }
+        return CapturedSelection(text: String(text.prefix(SelectionReader.maxLength)), element: nil, pid: target.pid,
+                                 bundleID: app.bundleIdentifier, appName: app.localizedName ?? app.bundleIdentifier ?? "App",
+                                 viaAX: false, editable: false)
+    }
+
     // MARK: - Running a request
 
     private func run(_ kind: ActionKind, capture: Capture, at point: NSPoint, sameSelection: Bool = false) {
@@ -508,6 +673,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         requestTask?.cancel()
         requestGeneration += 1
         let generation = requestGeneration
+        var capture = capture
+        if !sameSelection { capture.selection.editable = SelectionReader.isEditable(capture.selection) }   // 0.2.1.k.12: two AX calls, only now
         lastCapture = capture
         result.copiesAreSensitive = capture.overridden
         streamedText = ""
@@ -619,7 +786,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let config = LLMConfig(baseURL: AppSettings.baseURL, apiKey: key, model: AppSettings.model)
-        guard let capture = lastCapture, let translation = completedTranslation else { return }
+        guard let capture = lastCapture, let translation = completedTranslation else {
+            result.showReplyError(L("原文已不在，请重新划词。", "The original text is gone; select it again.", "元のテキストがありません。もう一度選択してください。", "원문이 없습니다. 다시 선택하세요."))
+            return
+        }
         streamedReply = ""
         let messages = StyleContext.replyMessages(Prompts.reply(
             text: text, direction: direction, context: context, style: AppSettings.translationStyle,
@@ -667,6 +837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func replaceSelection(with text: String) {
         guard let capture = lastCapture, !text.isEmpty else { return }
+        let point = NSPoint(x: result.frame.minX, y: result.frame.maxY)
         closeResult()
         let selection = capture.selection
         let scene = capture.context.scene
@@ -676,16 +847,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // it, so paste there instead.
             if selection.viaAX, selection.editable, let element = selection.element,
                scene == .document || scene == .email {
+                // 0.2.1.k.12: only if what is selected now is still the text that was translated.
+                guard AX.string(element, kAXSelectedTextAttribute)?.trimmed == selection.text.trimmed else {
+                    self.leaveOnClipboard(text, sensitive: capture.overridden, at: point); return
+                }
                 let error = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
                 if error == .success { return }
             }
+            // A VM or remote desktop never gets a synthetic ⌘V.
+            if SelectionReader.sendsNoSyntheticKeys(selection.bundleID) { self.leaveOnClipboard(text, sensitive: capture.overridden, at: point); return }
             if let app = NSRunningApplication(processIdentifier: selection.pid), !app.isActive {
                 app.activate(options: [])
                 try? await Task.sleep(nanoseconds: 150_000_000)
             } else {
                 try? await Task.sleep(nanoseconds: 80_000_000)
             }
-            await Clipboard.paste(text)
+            if !(await Clipboard.paste(text, into: selection.pid)) { self.leaveOnClipboard(text, sensitive: capture.overridden, at: point) }
         }
+    }
+
+    /// Replace could not be done safely: the text is put on the clipboard for the user to paste.
+    /// Text the user let through the sensitive check is marked like the card's own copy, so clipboard
+    /// managers do not record it.
+    private func leaveOnClipboard(_ text: String, sensitive: Bool, at point: NSPoint) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.prepareForNewContents(with: .currentHostOnly)
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        if sensitive {
+            item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+            item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+            item.setString("", forType: SensitiveGuard.ownPasteboardType)
+        }
+        pasteboard.writeObjects([item])
+        result.showNotice(L("没有替换（选区已变化，或此处不能粘贴）。译文已复制，请自行粘贴。",
+                            "Not replaced (the selection changed, or pasting here is not safe). The text is on the clipboard; paste it yourself.",
+                            "置き換えませんでした（選択が変わったか、ここには貼り付けられません）。訳文はコピー済みです。手動で貼り付けてください。", "바꾸지 않았습니다(선택이 바뀌었거나 여기에는 붙여 넣을 수 없음). 번역은 복사해 두었으니 직접 붙여 넣으세요."), at: point)
     }
 }

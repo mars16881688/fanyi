@@ -48,12 +48,6 @@ final class FloatingPanel: NSPanel {
     }
 }
 
-/// A button that reacts to the very first click even though its window is not
-/// key and the app is not active.
-final class FirstMouseButton: NSButton {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-}
-
 /// Plain view reporting hover enter/exit, even while the app is inactive.
 final class HoverView: NSView {
     var onEnter: (@MainActor () -> Void)?
