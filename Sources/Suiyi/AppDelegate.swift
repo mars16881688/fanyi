@@ -849,28 +849,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                scene == .document || scene == .email {
                 // 0.2.1.k.12: only if what is selected now is still the text that was translated.
                 guard AX.string(element, kAXSelectedTextAttribute)?.trimmed == selection.text.trimmed else {
-                    self.leaveOnClipboard(text, at: point); return
+                    self.leaveOnClipboard(text, sensitive: capture.overridden, at: point); return
                 }
                 let error = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
                 if error == .success { return }
             }
             // A VM or remote desktop never gets a synthetic ⌘V.
-            if SelectionReader.sendsNoSyntheticKeys(selection.bundleID) { self.leaveOnClipboard(text, at: point); return }
+            if SelectionReader.sendsNoSyntheticKeys(selection.bundleID) { self.leaveOnClipboard(text, sensitive: capture.overridden, at: point); return }
             if let app = NSRunningApplication(processIdentifier: selection.pid), !app.isActive {
                 app.activate(options: [])
                 try? await Task.sleep(nanoseconds: 150_000_000)
             } else {
                 try? await Task.sleep(nanoseconds: 80_000_000)
             }
-            if !(await Clipboard.paste(text, into: selection.pid)) { self.leaveOnClipboard(text, at: point) }
+            if !(await Clipboard.paste(text, into: selection.pid)) { self.leaveOnClipboard(text, sensitive: capture.overridden, at: point) }
         }
     }
 
     /// Replace could not be done safely: the text is put on the clipboard for the user to paste.
-    private func leaveOnClipboard(_ text: String, at point: NSPoint) {
+    /// Text the user let through the sensitive check is marked like the card's own copy, so clipboard
+    /// managers do not record it.
+    private func leaveOnClipboard(_ text: String, sensitive: Bool, at point: NSPoint) {
         let pasteboard = NSPasteboard.general
         pasteboard.prepareForNewContents(with: .currentHostOnly)
-        pasteboard.setString(text, forType: .string)
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        if sensitive {
+            item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+            item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+            item.setString("", forType: SensitiveGuard.ownPasteboardType)
+        }
+        pasteboard.writeObjects([item])
         result.showNotice(L("没有替换（选区已变化，或此处不能粘贴）。译文已复制，请自行粘贴。",
                             "Not replaced (the selection changed, or pasting here is not safe). The text is on the clipboard; paste it yourself.",
                             "置き換えませんでした（選択が変わったか、ここには貼り付けられません）。訳文はコピー済みです。手動で貼り付けてください。", "바꾸지 않았습니다(선택이 바뀌었거나 여기에는 붙여 넣을 수 없음). 번역은 복사해 두었으니 직접 붙여 넣으세요."), at: point)
