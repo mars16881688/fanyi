@@ -24,8 +24,10 @@ enum AgentIntegration {
         return candidate
     }
 
-    // Reject symlink escapes, another user's home, and any checkout (including worktrees).
-    static func validateUserFile(_ url: URL) throws {
+    // Reject symlink escapes, another user's home, and (for agent files) any checkout, including
+    // worktrees. 0.2.1.k.13: Suiyi's own ~/.suiyi/profile.md skips the checkout rule, so a home
+    // folder kept in Git (dotfiles) does not silently hide the profile from My style.
+    static func validateUserFile(_ url: URL, rejectRepositories: Bool = true) throws {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.resolvingSymlinksInPath().standardizedFileURL
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
@@ -33,6 +35,7 @@ enum AgentIntegration {
             throw NSError(domain: "Suiyi.AgentIntegration", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: L("接入文件必须位于当前用户的主目录内。请检查 CODEX_HOME 和符号链接。", "The file must be inside your home folder. Check CODEX_HOME and symlinks.", "ファイルはホームフォルダ内にある必要があります。CODEX_HOME とシンボリックリンクを確認してください。", "파일은 홈 폴더 안에 있어야 합니다. CODEX_HOME과 심볼릭 링크를 확인하세요.")])
         }
+        guard rejectRepositories else { return }
         var directory = resolved.deletingLastPathComponent()
         while directory.path != "/" {
             if fm.fileExists(atPath: directory.appendingPathComponent(".git").path) {

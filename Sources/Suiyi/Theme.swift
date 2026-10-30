@@ -10,6 +10,8 @@ final class RoundedMaterialView: NSVisualEffectView {
     private let rim = CAShapeLayer()
     private let tint = CALayer()
     private let sheen = CAGradientLayer()
+    private var appliedMaskRadius: CGFloat = -1
+    private static var maskCache: [CGFloat: NSImage] = [:]
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -57,7 +59,10 @@ final class RoundedMaterialView: NSVisualEffectView {
 
     private func applyShape() {
         let r = min(radius, min(bounds.width, bounds.height) / 2)
-        maskImage = Self.mask(radius: r)
+        if r != appliedMaskRadius {   // 0.2.1.k.11: the mask only depends on the radius
+            appliedMaskRadius = r
+            maskImage = Self.mask(radius: r)
+        }
         guard let layer else { return }
         layer.cornerRadius = r
         if #available(macOS 11.0, *) { layer.cornerCurve = .continuous }
@@ -81,6 +86,7 @@ final class RoundedMaterialView: NSVisualEffectView {
 
     /// Resizable rounded-rect mask; clips the behind-window blur itself.
     private static func mask(radius: CGFloat) -> NSImage {
+        if let cached = maskCache[radius] { return cached }
         let edge = radius * 2 + 1
         let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
             NSColor.black.setFill()
@@ -89,6 +95,7 @@ final class RoundedMaterialView: NSVisualEffectView {
         }
         image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
         image.resizingMode = .stretch
+        maskCache[radius] = image
         return image
     }
 }
@@ -97,7 +104,6 @@ final class RoundedMaterialView: NSVisualEffectView {
 @MainActor
 final class RoundedSurfaceView: NSView {
     var radius: CGFloat = 12
-    var accent = false
 
     override var allowsVibrancy: Bool { false }
 
@@ -105,11 +111,7 @@ final class RoundedSurfaceView: NSView {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: radius, yRadius: radius)
-        if accent {
-            NSColor.controlAccentColor.setFill()
-        } else {
-            (dark ? NSColor.white.withAlphaComponent(0.07) : NSColor.white.withAlphaComponent(0.38)).setFill()
-        }
+        (dark ? NSColor.white.withAlphaComponent(0.07) : NSColor.white.withAlphaComponent(0.38)).setFill()
         path.fill()
         (dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.white.withAlphaComponent(0.7)).setStroke()
         path.lineWidth = 0.5

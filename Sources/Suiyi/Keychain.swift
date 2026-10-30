@@ -13,6 +13,8 @@ enum Keychain {
 
     private static var cachedKey: String?
     private static var didLoad = false
+    /// 0.2.1.k.13: after the user denies access, ask again only after a minute, not on every request.
+    private static var deniedAt: Date?
 
     private static func baseQuery() -> [String: Any] {
         [
@@ -24,6 +26,7 @@ enum Keychain {
 
     static func apiKey() -> String? {
         if didLoad { return cachedKey }
+        if let deniedAt, Date().timeIntervalSince(deniedAt) < 60 { return nil }
         var query = baseQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -41,7 +44,8 @@ enum Keychain {
             cachedKey = nil
             didLoad = true
         default:
-            // e.g. the user denied access; try again next time.
+            // e.g. the user denied access; try again in a minute.
+            deniedAt = Date()
             return nil
         }
         return cachedKey

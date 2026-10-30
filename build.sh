@@ -46,34 +46,32 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.6</string>
+    <string>0.2.7</string>
     <key>CFBundleVersion</key>
-    <string>8</string>
+    <string>9</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>随译需要读取当前应用中选中的文字，以便翻译或改写。</string>
 </dict>
 </plist>
 PLIST
 
-# Localized app name and permission prompt (Finder, Dock tooltip, system dialogs).
+# Localized app name (Finder, Dock tooltip, system dialogs). Suiyi sends no Apple Events, so there
+# is no Apple Events usage string (0.2.1.k.13).
 write_strings() {
     mkdir -p "$APP/Contents/Resources/$1.lproj"
     cat > "$APP/Contents/Resources/$1.lproj/InfoPlist.strings" <<STRINGS
 CFBundleName = "$2";
 CFBundleDisplayName = "$2";
-NSAppleEventsUsageDescription = "$3";
 STRINGS
 }
-write_strings zh-Hans "随译" "随译需要读取当前应用中选中的文字，以便翻译或改写。"
-write_strings en "Suiyi" "Suiyi reads the text you select in the current app so it can translate or rewrite it."
-write_strings ja "Suiyi" "Suiyi は翻訳や書き換えのため、現在のアプリで選択したテキストを読み取ります。"
-write_strings ko "Suiyi" "Suiyi는 번역하거나 다시 쓰기 위해 현재 앱에서 선택한 텍스트를 읽습니다."
+write_strings zh-Hans "随译"
+write_strings en "Suiyi"
+write_strings ja "Suiyi"
+write_strings ko "Suiyi"
 
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 for f in "$APP"/Contents/Resources/*.lproj/InfoPlist.strings; do plutil -lint "$f" >/dev/null; done
@@ -93,7 +91,8 @@ if [[ "$SIGN_IDENTITY" != "-" ]]; then
     # 1) Dedicated keychain created by scripts/create-signing-cert.sh (no GUI prompts).
     if [[ -f "$SIGN_KEYCHAIN" ]]; then
         PW="$(security find-generic-password -s "$SIGN_PW_SERVICE" -a "$USER" -w 2>/dev/null || true)"
-        [[ -n "$PW" ]] && security unlock-keychain -p "$PW" "$SIGN_KEYCHAIN" 2>/dev/null || true
+        # The password reaches `security` on stdin, not as an argument visible in `ps`.
+        [[ -n "$PW" ]] && printf 'unlock-keychain -p %s %s\n' "$PW" "$SIGN_KEYCHAIN" | security -i >/dev/null 2>&1 || true
         HASH="$(security find-identity -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null \
             | grep -F "\"$SIGN_IDENTITY\"" | head -1 | awk '{print $2}')"
         [[ -n "$HASH" ]] && SIGN_ARGS=(-s "$HASH" --keychain "$SIGN_KEYCHAIN")
