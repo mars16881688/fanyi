@@ -12,6 +12,7 @@ final class ResultPanelController: NSObject {
     var onVisibilityChange: (@MainActor () -> Void)?
     /// The 翻译 / 改写 tabs ask for the same selection in the other mode.
     var onSwitchKind: (@MainActor (ActionKind) -> Void)?
+    var onSpeak: (@MainActor () -> Void)?
 
     private static let panelWidth: CGFloat = 420
     private static let maxPanelHeight: CGFloat = 360
@@ -38,6 +39,9 @@ final class ResultPanelController: NSObject {
     private var replyButton: NSButton?
     private var replyCopyButton: NSButton?
     private let closeButton = GlassButton(title: "", symbol: "xmark", style: .plain, size: .small,
+                                          target: nil, action: nil)
+    /// Re-reads the selection aloud. Shown only on a pronunciation card.
+    private let speakButton = GlassButton(title: "", symbol: "speaker.wave.2", style: .plain, size: .small,
                                           target: nil, action: nil)
     private let translateTab = GlassButton(title: L("翻译", "Translate", "翻訳", "번역"), symbol: "character.book.closed",
                                            style: .plain, size: .small, target: nil, action: nil)
@@ -127,13 +131,18 @@ final class ResultPanelController: NSObject {
         closeButton.toolTip = L("关闭（Esc）", "Close (Esc)", "閉じる（Esc）", "닫기 (Esc)")
         closeButton.setAccessibilityLabel(L("关闭", "Close", "閉じる", "닫기"))
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
+        speakButton.target = self
+        speakButton.action = #selector(speakClicked(_:))
+        speakButton.toolTip = L("再读一遍", "Read aloud again", "もう一度読み上げる", "다시 읽기")
+        speakButton.setAccessibilityLabel(L("再读一遍", "Read aloud again", "もう一度読み上げる", "다시 읽기"))
+        speakButton.setContentHuggingPriority(.required, for: .horizontal)
         translateTab.target = self
         translateTab.action = #selector(tabClicked(_:))
         translateTab.toolTip = L("翻译（⌥⌘T）", "Translate (⌥⌘T)", "翻訳（⌥⌘T）", "번역 (⌥⌘T)")
         rewriteTab.target = self
         rewriteTab.action = #selector(tabClicked(_:))
         rewriteTab.toolTip = L("改写（⌥⌘R）", "Rewrite (⌥⌘R)", "書き換え（⌥⌘R）", "다시 쓰기 (⌥⌘R)")
-        let headerRow = NSStackView(views: [modeIcon, modeLabel, tabs, headerLabel, spinner, closeButton])
+        let headerRow = NSStackView(views: [modeIcon, modeLabel, tabs, headerLabel, spinner, speakButton, closeButton])
         headerRow.orientation = .horizontal
         headerRow.distribution = .fill
         headerRow.alignment = .centerY
@@ -577,6 +586,30 @@ final class ResultPanelController: NSObject {
         footer.isHidden = views.isEmpty
     }
 
+    private static func modeTitle(_ kind: ActionKind) -> String {
+        switch kind {
+        case .translate: return L("翻译", "Translate", "翻訳", "번역")
+        case .rewrite: return L("改写", "Rewrite", "書き換え", "다시 쓰기")
+        case .pronounce: return L("发音", "Pronunciation", "発音", "발음")
+        }
+    }
+
+    private static func modeSymbol(_ kind: ActionKind) -> String {
+        switch kind {
+        case .translate: return "character.book.closed"
+        case .rewrite: return "pencil.line"
+        case .pronounce: return "speaker.wave.2"
+        }
+    }
+
+    private static func loadingText(_ kind: ActionKind) -> String {
+        switch kind {
+        case .translate: return L("正在翻译…", "Translating…", "翻訳中…", "번역 중…")
+        case .rewrite: return L("正在改写…", "Rewriting…", "書き換え中…", "다시 쓰는 중…")
+        case .pronounce: return L("正在查读法…", "Looking up pronunciation…", "発音を調べています…", "발음 찾는 중…")
+        }
+    }
+
     // MARK: - Public API
 
     /// `keepPosition`: `point` is the card's current top-left (switching tabs).
@@ -595,18 +628,18 @@ final class ResultPanelController: NSObject {
         streaming = true
         modeLabel.textColor = .controlAccentColor
         modeIcon.contentTintColor = .controlAccentColor
-        modeLabel.stringValue = kind == .translate ? L("翻译", "Translate", "翻訳", "번역") : L("改写", "Rewrite", "書き換え", "다시 쓰기")
-        modeIcon.image = SuiyiStyle.symbol(kind == .translate ? "character.book.closed" : "pencil.line",
-                                          description: modeLabel.stringValue)
+        modeLabel.stringValue = Self.modeTitle(kind)
+        modeIcon.image = SuiyiStyle.symbol(Self.modeSymbol(kind), description: modeLabel.stringValue)
         headerLabel.stringValue = header
         tabs.isHidden = !showsTabs
+        speakButton.isHidden = kind != .pronounce
         modeIcon.isHidden = showsTabs
         modeLabel.isHidden = showsTabs
         selectTab(kind)
         spinner.startAnimation(nil)
         installTextBody()
         textView?.textStorage?.setAttributedString(NSAttributedString(
-            string: kind == .translate ? L("正在翻译…", "Translating…", "翻訳中…", "번역 중…") : L("正在改写…", "Rewriting…", "書き換え中…", "다시 쓰는 중…"),
+            string: Self.loadingText(kind),
             attributes: [.font: NSFont.systemFont(ofSize: 14),
                          .foregroundColor: NSColor.secondaryLabelColor,
                          .paragraphStyle: SuiyiStyle.paragraph]))
@@ -833,6 +866,10 @@ final class ResultPanelController: NSObject {
         let picked: ActionKind = sender === rewriteTab ? .rewrite : .translate
         guard picked != kind else { return }
         onSwitchKind?(picked)
+    }
+
+    @objc private func speakClicked(_ sender: NSButton) {
+        onSpeak?()
     }
 
     @objc private func closeClicked(_ sender: NSButton) {
