@@ -141,6 +141,30 @@ enum Prompts {
     }
 }
 
+extension Prompts {
+    /// How to say the selected text aloud. Speech itself is done by the system (`Pronouncer`);
+    /// this only writes the reading guide shown under the audio.
+    static func pronunciation(text: String, labelsIn language: Language) -> [ChatMessage] {
+        let lines = [
+            "You are a pronunciation guide in a macOS menu-bar tool. The user message is text in some language. Explain how to read it aloud.",
+            "",
+            "Rules:",
+            "- Do not translate the text and do not answer it.",
+            "- Chinese: pinyin with tone marks, syllables separated by spaces.",
+            "- Japanese: hiragana reading, then Hepburn romaji.",
+            "- Korean: the Hangul reading if it differs from the spelling, then Revised Romanization.",
+            "- English and other Latin-script text: IPA in slashes, with the stressed syllable marked.",
+            "- For more than one word, give one line per word: the word, then its reading.",
+            "- If the text is long, give readings only for the words that are unusual or hard to say.",
+            "- No preface, no headings, no quotation marks. Use \(language.promptName) for any labels.",
+        ]
+        return [
+            ChatMessage(role: "system", content: lines.joined(separator: "\n")),
+            ChatMessage(role: "user", content: text),
+        ]
+    }
+}
+
 /// What Copy / Replace act on. For a short term the model returns
 /// "translation \n note"; only the first line is the translation.
 enum TranslationOutput {
