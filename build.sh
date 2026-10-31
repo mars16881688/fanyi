@@ -46,9 +46,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.7</string>
+    <string>0.2.8</string>
     <key>CFBundleVersion</key>
-    <string>9</string>
+    <string>10</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
