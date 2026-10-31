@@ -3,6 +3,8 @@ import AppKit
 enum ActionKind {
     case translate
     case rewrite
+    /// Reads the selection aloud and explains how to pronounce it. Has no tab.
+    case pronounce
 }
 
 /// The small round button shown after a mouse selection. One click translates;

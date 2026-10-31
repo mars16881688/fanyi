@@ -88,6 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         result.onReplyTranslate = { [weak self] text in self?.translateReply(text) }
         result.onSwitchKind = { [weak self] kind in self?.switchKind(kind) }
+        result.onSpeak = { [weak self] in
+            guard let text = self?.lastCapture?.selection.text else { return }
+            Pronouncer.shared.speak(text)
+        }
         result.onClose = { [weak self] in self?.closeResult() }
         result.onReplace = { [weak self] text in self?.replaceSelection(with: text) }
         monitor.onMouseDown = { [weak self] point in self?.mouseDown(at: point) }
@@ -320,7 +324,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let okR = center.register(id: 2, keyCode: HotKeyCenter.keyR, modifiers: HotKeyCenter.optionCommand) { [weak self] in
             self?.triggerDirect(.rewrite, delayNanos: 0)
         }
-        if !okT || !okR {
+        let okP = center.register(id: 3, keyCode: HotKeyCenter.keyP, modifiers: HotKeyCenter.optionCommand) { [weak self] in
+            self?.triggerDirect(.pronounce, delayNanos: 0)
+        }
+        if !okT || !okR || !okP {
             NSLog("Suiyi: some global hot keys could not be registered (already in use?)")
         }
     }
@@ -707,10 +714,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             header = L("保持原语言", "Same language", "同じ言語のまま", "같은 언어 유지") + "  ·  \(context.appName)"
             messages = Prompts.rewrite(text: text, context: context)
             temperature = 0.7
+        case .pronounce:
+            header = L("朗读与读法", "Pronunciation", "発音", "발음") + "  ·  \(context.appName)"
+            messages = Prompts.pronunciation(text: text, labelsIn: AppSettings.myLanguage)
+            temperature = 0.2
+            Pronouncer.shared.speak(text)   // speaks at once, before any network call
         }
 
-        result.present(kind: kind, header: header, editable: capture.selection.editable,
-                       shortPhrase: shortPhrase, at: point, reply: reply, keepPosition: sameSelection)
+        // Replace is only for translations and rewrites; a reading guide is never written back.
+        result.present(kind: kind, header: header, editable: kind != .pronounce && capture.selection.editable,
+                       shortPhrase: shortPhrase, at: point, reply: reply, keepPosition: sameSelection,
+                       showsTabs: kind != .pronounce)
 
         if sameSelection, let cached = cachedOutputs[kind] {
             streamedText = cached
@@ -737,7 +751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.result.finish()
                 self.completedTranslation = self.streamedText
                 self.cachedOutputs[kind] = self.streamedText
-                if !capture.overridden {
+                if !capture.overridden, kind != .pronounce {
                     self.logHistory(HistoryEntry(mode: kind == .translate ? "translate" : "rewrite",
                         appBundleID: capture.selection.bundleID, appName: context.appName,
                         original: text, translation: self.streamedText))

@@ -31,6 +31,7 @@ final class HotKeyCenter {
 
     static let keyT: UInt32 = 0x11            // kVK_ANSI_T
     static let keyR: UInt32 = 0x0F            // kVK_ANSI_R
+    static let keyP: UInt32 = 0x23            // kVK_ANSI_P
     static let optionCommand: UInt32 = UInt32(cmdKey | optionKey)
 
     private static let signature: OSType = 0x464E_5949   // 'FNYI'
