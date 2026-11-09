@@ -175,3 +175,7 @@ scripts/create-signing-cert.sh
 - 虚拟机和远程桌面（Parallels、VMware、UTM、Windows App、屏幕共享、VNC、TeamViewer、Try Omarchy 等）里永远不模拟按键：先在里面复制，再按 `⌥⌘T` 翻译剪贴板里的文字。
 - 菜单里的 **在「当前应用」中停用随译** 可一键把前台应用加入排除列表，再点一次取消。
 - 如果 `⌥⌘T` / `⌥⌘R` 被其他应用占用，快捷键会注册失败，可以从菜单里操作。
+
+## 许可
+
+[MIT](LICENSE)
