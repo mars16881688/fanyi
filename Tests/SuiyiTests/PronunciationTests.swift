@@ -9,6 +9,7 @@ struct PronunciationTests {
         ("我们周四开会可以吗？", "zh-CN"),
         ("明日の会議は何時からですか？", "ja-JP"),
         ("내일 회의는 몇 시에 시작하나요?", "ko-KR"),
+        ("我哋聽日開會得唔得？", "zh-HK"),
     ])
     func voiceLanguage(text: String, expected: String) {
         #expect(Pronouncer.voiceLanguage(for: text) == expected)

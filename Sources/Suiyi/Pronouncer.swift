@@ -15,6 +15,7 @@ final class Pronouncer {
         case "en": return "en-US"
         case "ja": return "ja-JP"
         case "ko": return "ko-KR"
+        case "yue": return "zh-HK"
         default: return nil
         }
     }

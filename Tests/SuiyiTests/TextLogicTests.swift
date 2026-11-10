@@ -8,6 +8,7 @@ struct LanguageDetectorTests {
     private static let chinese = "我们周四开会可以吗？"
     private static let japanese = "明日の会議は何時からですか？"
     private static let korean = "내일 회의는 몇 시에 시작하나요?"
+    private static let cantonese = "我哋聽日開會得唔得？"
 
     @Test("Detects the three working languages")
     func detects() {
@@ -16,6 +17,19 @@ struct LanguageDetectorTests {
         #expect(LanguageDetector.detect(Self.japanese) == .japanese)
         #expect(LanguageDetector.detect(Self.korean) == .korean)
         #expect(LanguageDetector.detect("   ") == nil)
+    }
+
+    @Test("Cantonese is told apart from Mandarin by its own words", arguments: [
+        ("我哋聽日開會得唔得？", Language.cantonese),
+        ("佢今日冇返工，你搵我啦", .cantonese),
+        ("唔該", .cantonese),
+        ("呢份報告我睇咗，冇問題。", .cantonese),
+        ("我們明天開會可以嗎？", .chinese),
+        ("这个问题我们明天再讨论吧", .chinese),
+        ("你在干什么呢？", .chinese),
+    ])
+    func cantonese(text: String, expected: Language) {
+        #expect(LanguageDetector.detect(text) == expected)
     }
 
     @Test("Any pair: foreign text goes into my language, mine goes out", arguments: [
@@ -36,6 +50,11 @@ struct LanguageDetectorTests {
         (chinese, .korean, .english, .korean),
         (english, .korean, .japanese, .korean),
         (japanese, .korean, .english, .korean),
+        (cantonese, .chinese, .english, .chinese),
+        (chinese, .chinese, .cantonese, .cantonese),
+        (english, .cantonese, .chinese, .cantonese),
+        (chinese, .cantonese, .english, .cantonese),
+        (cantonese, .cantonese, .english, .english),
     ])
     func pairs(text: String, mine: Language, outgoing: Language, expected: Language) {
         #expect(LanguageDetector.direction(for: text, mine: mine, outgoing: outgoing).target == expected)
@@ -53,6 +72,9 @@ struct LanguageDetectorTests {
         let fromChinese = LanguageDetector.direction(for: Self.chinese, mine: .english, outgoing: .japanese)
         #expect(try #require(LanguageDetector.replyDirection(for: fromChinese, mine: .english)).target == .chinese)
 
+        let fromCantonese = LanguageDetector.direction(for: Self.cantonese, mine: .chinese, outgoing: .english)
+        #expect(try #require(LanguageDetector.replyDirection(for: fromCantonese, mine: .chinese)).target == .cantonese)
+
         let outgoing = LanguageDetector.direction(for: Self.chinese, mine: .chinese, outgoing: .english)
         #expect(LanguageDetector.replyDirection(for: outgoing, mine: .chinese) == nil)
         let unknown = TranslationDirection(source: nil, target: .chinese)
@@ -67,10 +89,13 @@ struct LanguageDetectorTests {
         #expect(Language(.french)?.code == "fr")
         #expect(Language(code: "fr").promptName == "French")
         #expect(Language.japanese.promptName.contains("Japanese"))
-        #expect(Language.selectable == [.chinese, .english, .japanese, .korean])
+        #expect(Language.selectable == [.chinese, .english, .japanese, .korean, .cantonese])
         #expect(Language(.korean) == .korean)
         #expect(Language.korean.promptName.contains("Korean"))
         #expect(Language.korean.nativeName == "한국어")
+        #expect(Language.cantonese.code == "yue")
+        #expect(Language.cantonese.promptName.contains("Cantonese"))
+        #expect(Language.cantonese.nativeName == "粵語")
     }
 
     @Test("Script counting")
