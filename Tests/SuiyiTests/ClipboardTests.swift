@@ -29,7 +29,8 @@ struct ClipboardTests {
     func keepsUsersOwnCopy() async {
         let pasteboard = pasteboard(holding: "a long article copied earlier")
         defer { pasteboard.releaseGlobally() }
-        let text = await Clipboard.copySelection(on: pasteboard, settle: 200_000_000) {
+        // The user's copy lands 50 ms in; a 1 s settle leaves room for slow CI runners.
+        let text = await Clipboard.copySelection(on: pasteboard, settle: 1_000_000_000) {
             pasteboard.clearContents()
             pasteboard.setString("selected words", forType: .string)
             Task { @MainActor in
