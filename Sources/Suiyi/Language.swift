@@ -3,6 +3,7 @@ import NaturalLanguage
 
 /// A language text can be translated from or into, by ISO 639-1 code.
 /// Chinese means Simplified Chinese on output; Traditional input is "zh" too.
+/// Cantonese ("yue") means written Hong Kong Cantonese, told apart from Chinese by its own words.
 struct Language: Hashable, Identifiable, Sendable {
     let code: String
     var id: String { code }
@@ -11,9 +12,10 @@ struct Language: Hashable, Identifiable, Sendable {
     static let english = Language(code: "en")
     static let japanese = Language(code: "ja")
     static let korean = Language(code: "ko")
+    static let cantonese = Language(code: "yue")
 
     /// Languages a user can choose as their own or outgoing language.
-    static let selectable: [Language] = [.chinese, .english, .japanese, .korean]
+    static let selectable: [Language] = [.chinese, .english, .japanese, .korean, .cantonese]
 
     /// Used in prompts.
     var promptName: String {
@@ -22,6 +24,7 @@ struct Language: Hashable, Identifiable, Sendable {
         case "en": return "English"
         case "ja": return "Japanese (日本語)"
         case "ko": return "Korean (한국어)"
+        case "yue": return "colloquial Hong Kong Cantonese written in Traditional Chinese characters (粵語口語, e.g. 嘅、咗、唔、喺), not Standard Written Chinese"
         default: return Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
         }
     }
@@ -33,6 +36,7 @@ struct Language: Hashable, Identifiable, Sendable {
         case "en": return "EN"
         case "ja": return "日本語"
         case "ko": return "한국어"
+        case "yue": return "粵語"
         default: return code.uppercased()
         }
     }
@@ -44,6 +48,7 @@ struct Language: Hashable, Identifiable, Sendable {
         case "en": return "English"
         case "ja": return "日本語"
         case "ko": return "한국어"
+        case "yue": return "粵語"
         default: return Locale(identifier: code).localizedString(forLanguageCode: code) ?? shortLabel
         }
     }
@@ -55,6 +60,10 @@ struct Language: Hashable, Identifiable, Sendable {
         case ("en", .zh): return "英文"
         case ("ja", .zh): return "日文"
         case ("ko", .zh): return "韩文"
+        case ("yue", .zh): return "粤语"
+        case ("yue", .en): return "Cantonese"
+        case ("yue", .ja): return "広東語"
+        case ("yue", .ko): return "광둥어"
         case ("zh", .ja): return "中国語"
         case ("en", .ja): return "英語"
         case ("ja", .ja): return "日本語"
@@ -111,6 +120,18 @@ enum LanguageDetector {
         }
     }
 
+    /// Characters common in written Cantonese and rare in Mandarin.
+    static let cantoneseMarkers: Set<Character> = [
+        "嘅", "咗", "唔", "喺", "冇", "哋", "嚟", "啲", "佢", "嘢", "睇", "嗰", "噉",
+        "攞", "搵", "揾", "畀", "啱", "嘞", "喎", "咩", "乜", "諗", "咪", "嘥", "瞓", "冚",
+    ]
+
+    /// Two markers, or one in a short text ("唔該"), mark Han text as Cantonese.
+    static func looksCantonese(_ text: String, han: Int) -> Bool {
+        let markers = text.filter { cantoneseMarkers.contains($0) }.count
+        return markers >= 2 || (markers == 1 && han <= 12)
+    }
+
     static func scriptCounts(_ text: String) -> ScriptCounts {
         var counts = ScriptCounts()
         for scalar in text.unicodeScalars {
@@ -147,7 +168,9 @@ enum LanguageDetector {
         let detected = dominantLanguage(text)
         let unknown = detected == nil || detected == .undetermined
 
-        if counts.kana > 0 || detected == .japanese { return .japanese }
+        if counts.kana > 0 { return .japanese }
+        if counts.han > 0 && counts.hangul == 0 && looksCantonese(text, han: counts.han) { return .cantonese }
+        if detected == .japanese { return .japanese }
         if detected == .simplifiedChinese || detected == .traditionalChinese { return .chinese }
         if unknown && counts.han > 0 && counts.han * 3 >= counts.latin { return .chinese }
         if detected == .english || (unknown && counts.latin > 0) { return .english }

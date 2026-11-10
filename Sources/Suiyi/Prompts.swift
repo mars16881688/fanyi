@@ -151,6 +151,7 @@ extension Prompts {
             "Rules:",
             "- Do not translate the text and do not answer it.",
             "- Chinese: pinyin with tone marks, syllables separated by spaces.",
+            "- Cantonese (text with words such as 嘅、咗、唔、喺): Jyutping with tone numbers, syllables separated by spaces.",
             "- Japanese: hiragana reading, then Hepburn romaji.",
             "- Korean: the Hangul reading if it differs from the spelling, then Revised Romanization.",
             "- English and other Latin-script text: IPA in slashes, with the stressed syllable marked.",

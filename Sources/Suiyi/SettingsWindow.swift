@@ -190,7 +190,7 @@ struct SettingsView: View {
                     .foregroundColor(Color(nsColor: .controlAccentColor))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L("随译设置", "Suiyi Settings", "Suiyi 設定", "Suiyi 설정")).font(.title3.weight(.semibold))
-                    Text(L("中英日韩互译 · 改写 · 回复", "Translate between Chinese, English, Japanese and Korean · Rewrite · Reply", "日中英韓の相互翻訳 · 書き換え · 返信", "한국어·중국어·영어·일본어 상호 번역 · 다시 쓰기 · 답장")).font(.caption).foregroundColor(.secondary)
+                    Text(L("中英日韩粤互译 · 改写 · 回复", "Translate between Chinese, English, Japanese, Korean and Cantonese · Rewrite · Reply", "日中英韓・広東語の相互翻訳 · 書き換え · 返信", "한국어·중국어·영어·일본어·광둥어 상호 번역 · 다시 쓰기 · 답장")).font(.caption).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
