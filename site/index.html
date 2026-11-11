@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07071a">
+  <title>Fanyi（翻译）— 选中，即懂。回复，也地道。</title>
+  <meta name="description" content="Fanyi 是 macOS 13+ 菜单栏 AI 划词工具。选中文字即可翻译、改写或用中文回复英文消息。自带 API Key，无遥测，从源码安装。">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:title" content="Fanyi（翻译）— 选中，即懂。回复，也地道。">
+  <meta property="og:description" content="一个小按钮，翻译、改写、双向回复。为 macOS 打造，连接你自己的 AI 接口。">
+  <meta property="og:image" content="assets/icon-512.png">
+  <link rel="icon" type="image/png" href="assets/favicon-64.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="site-header" id="site-header">
+    <nav class="nav-shell" aria-label="主导航">
+      <a class="brand" href="#" aria-label="Fanyi 首页"><img src="assets/favicon-64.png" width="28" height="28" alt=""><span>Fanyi</span></a>
+      <div class="nav-links"><a href="#demo">演示</a><a href="#features">功能</a><a href="#scenarios">场景</a><a href="#privacy">隐私</a><a href="#install">安装</a></div>
+      <a class="button button-black nav-github" href="https://github.com/mars16881688/fanyi" aria-label="在 GitHub 查看 Fanyi 源码">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero dark-section" aria-labelledby="hero-title">
+      <div class="streaks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="container hero-content">
+        <p class="eyebrow light-eyebrow"><span class="status-dot" aria-hidden="true"></span>macOS 菜单栏 AI 划词工具</p>
+        <h1 id="hero-title"><span>选中，即懂。</span><strong>回复，也地道。</strong></h1>
+        <p class="hero-description">从看懂一句话，到说出你的意思，<br class="mobile-break">都在选中文字旁完成。</p>
+        <div class="button-row"><a class="button button-white" href="#install">从源码安装 <span aria-hidden="true">↗</span></a><a class="button button-ghost" href="#demo"><span class="play-icon" aria-hidden="true"></span>看看演示</a></div>
+        <p class="hero-note">macOS 13+ <span>·</span> 只住菜单栏 <span>·</span> 自带 API Key</p>
+        <div class="flow-strip" aria-label="双向回复流程：对方英文原文，中文译文，我的中文回复，英文回复">
+          <div class="flow-track" aria-hidden="true"><span></span></div>
+          <div class="flow-node"><b>EN</b><span>对方原文</span></div><div class="flow-node"><b>中</b><span>中文译文</span></div><div class="flow-node reply-node"><b>中</b><span>我的回复</span></div><div class="flow-node"><b>EN</b><span>英文回复</span></div>
+        </div>
+        <div class="hero-bottom"><span>读懂对方</span><span class="flow-divider" aria-hidden="true">↔</span><span>表达自己</span></div>
+      </div>
+    </section>
+
+    <section class="section demo-section" id="demo" aria-labelledby="demo-title">
+      <div class="container">
+        <div class="section-heading reveal"><p class="eyebrow">30 秒看懂</p><h2 id="demo-title">对话，<strong>不必来回切换。</strong></h2><p>英文消息读成中文，中文回复写成英文。<br>一个浮动卡片，接住整段对话。</p></div>
+        <div class="demo-window reveal" id="demo-window" data-stage="0" aria-label="Fanyi 双向回复动画演示">
+          <div class="window-bar"><div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div><span class="window-app">消息</span><span class="window-menu">文件　编辑　显示</span><img src="assets/favicon-64.png" width="19" height="19" alt="菜单栏中的 Fanyi 图标"></div>
+          <div class="demo-workspace">
+            <div class="document"><div class="document-heading"><span class="avatar" aria-hidden="true">C</span><div><strong>工作讨论</strong><span>会议安排</span></div><span class="document-dots" aria-hidden="true">•••</span></div><p class="message-label">收到的消息</p><p class="source-message"><span id="selection">Could we move the meeting to Thursday? I'd like a little more time to prepare.</span></p><div class="document-rule"></div><p class="document-note">选中消息，直接在这里理解和回复。</p></div>
+            <div class="floating-action" id="floating-action" aria-hidden="true"><span class="floating-symbol">译</span><span class="action-options"><b>翻译</b><span></span>改写</span></div>
+            <div class="result-card" id="result-card"><div class="result-header"><span><img src="assets/favicon-64.png" width="20" height="20" alt="">Fanyi <span class="result-type">翻译</span></span><span aria-hidden="true">↗　×</span></div><div class="result-body"><div class="card-block"><span class="field-label">对方原文 <b>EN</b></span><p class="original-excerpt">Could we move the meeting to Thursday?</p></div><div class="card-block translation-block"><span class="field-label">中文译文 <b>中</b></span><p class="typed-text" id="demo-translation">我们能把会议改到周四吗？我想多一点时间做准备。</p></div><div class="reply-area"><div class="reply-label"><span class="field-label">我的中文回复</span><kbd>⌘↩</kbd></div><div class="reply-input" id="demo-reply">可以，周四没问题。准备好后告诉我。</div><div class="english-reply"><div class="reply-label"><span class="field-label">英文回复</span><span class="demo-copy" id="demo-copy">复制</span></div><p class="typed-text" id="demo-english">Sure, Thursday works for me. Let me know when you're ready.</p></div></div></div></div>
+          </div>
+        </div>
+        <div class="demo-controls"><ol class="demo-steps" aria-label="演示进度"><li data-step="0" class="active" aria-current="step"><span>00</span>选中</li><li data-step="1"><span>01</span>出现</li><li data-step="2"><span>02</span>翻译</li><li data-step="3"><span>03</span>回复</li><li data-step="4"><span>04</span>复制</li></ol><button class="play-toggle" id="play-toggle" type="button" aria-label="暂停演示" aria-pressed="false"><span id="play-glyph" aria-hidden="true">Ⅱ</span><span id="play-label">暂停</span></button></div>
+        <div class="demo-progress" aria-hidden="true"><span id="demo-progress"></span></div><p class="demo-caption" id="demo-status" role="status">示意演示 · 选中英文消息</p>
+      </div>
+    </section>
+
+    <section class="section features-section" id="features" aria-labelledby="features-title">
+      <div class="container"><div class="section-heading left-heading reveal"><p class="eyebrow">小工具，刚刚好</p><h2 id="features-title">一个小按钮，<br><strong>三种能力。</strong></h2><p>翻译、改写、回复。顺着你的工作方式来。</p></div>
+        <div class="bento-grid">
+          <article class="feature-card feature-translate reveal"><p class="card-eyebrow">01 · 划词</p><h3>划词即译</h3><p>点击或悬停展开小圆按钮，译文流式出现。结合应用、窗口标题与附近文字，理解语境和语气。</p><div class="selection-illustration" aria-hidden="true"><span>Make yourself understood.</span><b>译</b></div><div class="hotkey-row"><span><kbd>⌥⌘T</kbd> 翻译</span><span><kbd>⌥⌘R</kbd> 改写</span></div><p class="card-footnote">自动：中文 → 英文，其他语言 → 简体中文<br>也可固定目标：简体中文 / English / 日本語</p></article>
+          <article class="feature-card feature-rewrite reveal"><p class="card-eyebrow">02 · 改写</p><h3>同一个意思，<br>换一种说法。</h3><p>一次给出三个版本，每个版本都能复制，或在可编辑处替换。</p><div class="rewrite-examples"><span>更简洁 <b>周四见。</b></span><span>更正式 <b>期待周四与您交流。</b></span><span>更口语 <b>那就周四聊！</b></span></div></article>
+          <article class="feature-card dark-card feature-reply reveal"><p class="card-eyebrow">03 · 回复</p><h3>用中文想，<br>用英文说。</h3><p>看完译文，直接输入中文回复。按 <kbd>⌘↩</kbd>，英文回复流式生成，单独复制。</p><div class="mini-flow" aria-label="原文到译文到中文回复到英文回复"><span>EN<small>原文</small></span><i>→</i><span>中<small>译文</small></span><i>→</i><span class="coral">中<small>回复</small></span><i>→</i><span>EN<small>回复</small></span></div></article>
+          <article class="feature-card feature-api reveal"><p class="card-eyebrow">04 · 接口</p><h3>模型，由你选择。</h3><p>任何 OpenAI 兼容 API。填入自己的配置，用「测试连接」确认。</p><div class="chip-group"><span>DeepSeek <b>默认</b></span><span>OpenAI</span><span>OpenRouter</span><span>Ollama <b>本地</b></span></div><div class="keychain-note"><span aria-hidden="true">⌘</span>自带 Key，存于钥匙串</div></article>
+          <article class="feature-card dark-card feature-style reveal"><p class="card-eyebrow">05 · 我的风格 <span class="off-badge">默认关闭</span></p><h3>让回复，像你。</h3><p>主动开启「回复时参考我的风格」，让英文回复贴近你的语气与长度。</p><code class="profile-path">~/.fanyi/profile.md</code><div class="agent-chips"><span>Codex</span><span>Claude Code</span></div><p class="card-footnote">用自己的 API 生成画像，保留你写的「## 我的补充」。点击接入后，只在自己的 AGENTS.md / CLAUDE.md 添加可移除的标记块。</p></article>
+          <article class="feature-card feature-settings reveal"><p class="card-eyebrow">06 · 随你习惯</p><h3>安静待在菜单栏。</h3><p>没有 Dock 图标。浅色、深色模式随你选；用 bundle ID 排除不需要触发的应用。</p><div class="theme-preview" aria-hidden="true"><div><span>浅色</span><i></i><i></i></div><div><span>深色</span><i></i><i></i></div></div><p class="card-footnote">密码输入框与安全输入时不触发。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section scenarios-section" id="scenarios" aria-labelledby="scenarios-title"><div class="container"><div class="section-heading reveal"><p class="eyebrow">就在你工作的地方</p><h2 id="scenarios-title">少一点切换，<br><strong>多一点顺手。</strong></h2></div><div class="scenario-grid">
+      <article class="scenario-card reveal"><span class="scenario-index">01 / 聊天</span><h3>和海外同事聊天</h3><p>Slack、邮件里的消息，看懂后接着回复。</p><div class="snippet"><span>对方说</span><p>Does Thursday work for you?</p><span>你回复</span><p>周四可以。<i aria-hidden="true">→</i> Thursday works for me.</p></div></article>
+      <article class="scenario-card reveal"><span class="scenario-index">02 / 阅读</span><h3>读英文文档与代码注释</h3><p>在原来的阅读位置，理解关键的一句话。</p><div class="snippet"><span>原文</span><p>Returns the cached result if available.</p><span>译文</span><p>如果有缓存结果，则返回该结果。</p></div></article>
+      <article class="scenario-card reveal"><span class="scenario-index">03 / 写作</span><h3>写英文邮件与 PR 描述</h3><p>先把意思写清楚，再译成自然的英文。</p><div class="snippet"><span>中文</span><p>修复了保存设置后状态未更新的问题。</p><span>英文</span><p>Fix the state not updating after saving settings.</p></div></article>
+      <article class="scenario-card reveal"><span class="scenario-index">04 / 润色</span><h3>润色中文表达</h3><p>用「改写」调整语气，让表达更合适。</p><div class="snippet"><span>原文</span><p>我想问一下这个事情现在进展怎么样了。</p><span>更简洁</span><p>这件事进展如何？</p></div></article>
+    </div></div></section>
+
+    <section class="section how-section" aria-labelledby="how-title"><div class="container"><div class="section-heading left-heading reveal"><p class="eyebrow">不打断你的节奏</p><h2 id="how-title">三步，<strong>接着做你的事。</strong></h2></div><ol class="how-grid"><li class="reveal"><span class="large-number">01</span><h3>选中文字</h3><p>在正在使用的应用里，<br>选中你想理解或调整的文字。</p></li><li class="reveal"><span class="large-number">02</span><h3>点小圆按钮</h3><p>点击或悬停，展开翻译 / 改写。<br>也可以直接按快捷键。</p></li><li class="reveal"><span class="large-number">03</span><h3>复制 / 替换 / 回复</h3><p>卡片可拖动；原位置可编辑时可替换。<br>按 Esc 或点击外部，收起卡片。</p></li></ol></div></section>
+
+    <section class="section privacy-section dark-section" id="privacy" aria-labelledby="privacy-title"><div class="container"><div class="section-heading left-heading reveal"><p class="eyebrow light-eyebrow">你的文字，你的选择</p><h2 id="privacy-title"><span>只发送你选中的文字。</span><strong>其余，一概不碰。</strong></h2><p>触发翻译时附带少量周边上下文，帮助理解语境。<br>请求发往你配置的 API，没有遥测。</p></div><div class="privacy-grid"><article class="reveal"><span class="privacy-symbol" aria-hidden="true">↗</span><h3>只有触发，才发送</h3><p>翻译、改写和回复按你的操作发起，选中文字与少量上下文只发送到你自己的接口。</p></article><article class="reveal"><span class="privacy-symbol" aria-hidden="true">∅</span><h3>无遥测</h3><p>不收集键盘、屏幕或剪贴板历史。密码输入框与安全输入时不触发。</p></article><article class="reveal"><span class="privacy-symbol" aria-hidden="true">⌘</span><h3>Key 存于钥匙串</h3><p>自带 API Key，保存在 macOS Keychain。接口与模型配置由你掌握。</p></article><article class="reveal"><span class="privacy-symbol" aria-hidden="true">⌂</span><h3>历史与画像，默认关闭</h3><p>主动开启后，文件只保存在本机 <code>~/.fanyi/</code>。历史文件为 <code>history.jsonl</code>，画像为 <code>profile.md</code>。</p></article></div><div class="privacy-chips"><span><b aria-hidden="true">✓</b> 选中文字 → 你的接口</span><span><b aria-hidden="true">×</b> 不收集键盘 / 屏幕 / 剪贴板历史</span></div><p class="privacy-note">主动开启历史后，画像会使用你配置的 API 生成，相关历史会随请求发送；启用「我的风格」时，风格背景会随英文回复请求发送。使用本地 Ollama，可让这些请求也留在本机。</p></div></section>
+
+    <section class="section install-section" id="install" aria-labelledby="install-title"><div class="container install-content reveal"><img class="install-icon" src="assets/icon-512.png" width="88" height="88" alt="Fanyi 应用图标"><p class="eyebrow">从源码，开始使用</p><h2 id="install-title">让文字，<strong>流动起来。</strong></h2><p>为你的 Mac 装上这个小按钮。</p><div class="install-code"><div class="code-toolbar"><span>TERMINAL</span><button type="button" id="copy-install" aria-label="复制源码安装命令">复制命令</button></div><pre><code id="install-command">git clone https://github.com/mars16881688/fanyi &amp;&amp; cd fanyi &amp;&amp; ./build.sh &amp;&amp; ./install.sh</code></pre></div><p class="install-notes">macOS 13+ <span>·</span> 需要 Command Line Tools <span>·</span> 安装后授予辅助功能权限</p><p class="install-details">未安装 Command Line Tools？先运行 <code>xcode-select --install</code>。<br>可选：构建前运行 <code>scripts/create-signing-cert.sh</code>，使用稳定签名。<br>启动后填写自己的 API Key，并用「测试连接」确认配置。</p><a class="button button-black" href="https://github.com/mars16881688/fanyi">在 GitHub 查看源码 <span aria-hidden="true">↗</span></a><p id="copy-status" class="copy-status" role="status"></p></div></section>
+  </main>
+  <footer class="site-footer"><div class="container footer-content"><a class="brand" href="#" aria-label="返回 Fanyi 首页"><img src="assets/favicon-64.png" width="25" height="25" alt=""><span>Fanyi</span></a><span>为 macOS 打造</span><a href="https://github.com/mars16881688/fanyi">源码在 GitHub <span aria-hidden="true">↗</span></a></div></footer>
+</body>
+</html>
