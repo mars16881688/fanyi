@@ -1,6 +1,10 @@
 # 随译 Suiyi
 
+[English](README.en.md) · [官网](https://mars16881688.github.io/fanyi-site/) · [下载最新版](https://github.com/mars16881688/fanyi-site/releases/latest)
+
 Mac 全局翻译助手（原名 Fanyi），中英日韩粤任意互译，界面支持简体中文、English、日本語、한국어。
+
+<img src="docs/card-reply-zh.png" width="460" alt="随译的翻译卡片：日文消息译成中文，下方可以用中文写回复，再译回日文">
 
 一个只住在菜单栏里的个人划词翻译 / 改写工具。选中文字 → 点小圆按钮 → 直接出翻译，卡片顶部可切到「改写」，结果以流式方式显示在浮动卡片里。使用任何 OpenAI 兼容接口（默认 DeepSeek）。
 
@@ -68,7 +72,7 @@ SUIYI_SIGN_IDENTITY="Developer ID Application: <名称> (<TEAMID>)" SUIYI_NOTARY
 ## 反馈与自动处理
 
 - 菜单 **反馈…**：选择「问题 / 建议」并描述，点「在 GitHub 提交」会在浏览器打开预填好的 issue（公开仓库 `mars16881688/fanyi-site`），由用户确认提交；也可「发邮件」。只附带版本号、macOS 版本和语言设置，不附带任何选中文字。
-- 每天一次的 Claude Code 云端定时任务读取新反馈：判断是否有效、分类打标签并回复；可修复的在本仓库开 `feedback/<编号>` 分支的 PR，不会合并。
+- 每晚一次的 Claude Code 云端定时任务读取本仓库和 `fanyi-site` 的新反馈：判断是否有效、分类打标签并回复；值得改的开 `feedback/…` 分支的 PR。没有新反馈时，它会做一处小的主动改进，开 `improve/…` 分支的 PR。它只开 PR，不合并，也不发版。
 - `.github/workflows/test.yml` 在每个 PR 上用 macOS 运行 `swift test`，合并前看 CI 结果。
 
 ## 图标
