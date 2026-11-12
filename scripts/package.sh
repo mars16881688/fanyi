@@ -27,6 +27,8 @@ make_zip() {
     cp Resources/Distribution/*.txt "$STAGE/"
     # ditto keeps code signatures and extended attributes intact.
     ditto -c -k --keepParent "$STAGE" "$ZIP"
+    # The staging copy is a second Suiyi.app that Spotlight and Launchpad list.
+    rm -rf "$STAGE"
 }
 make_zip
 
